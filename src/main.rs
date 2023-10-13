@@ -1,9 +1,6 @@
 use std::{thread, time::Duration};
 
-use reqwest::{
-    blocking::{get, Client},
-    cookie::Jar,
-};
+use reqwest::blocking::Client;
 use config::Config;
 fn get_playback_sign(status: &str) -> &str {
     match status {
@@ -88,7 +85,6 @@ fn get_playing_metadata_tautulli(config: &AppConfig) -> Option<TautulliSession> 
 // }
 
 fn main() {
-    let config = Config::builder().add_source(config::File::with_name("App.toml")).build().unwrap();
     let app_config: AppConfig = AppConfig {
         tautulli_server_url: "http://server1-stats.omniplex.club/".to_string(), //get_activity
         tautulli_server_cookie: "tautulli_token_608ecf9fab56436b96d62243b0a05470=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMTIxOTUyMCwidXNlciI6IlByb2JhYmx5QUhhY2hlciIsInVzZXJfZ3JvdXAiOiJndWVzdCIsImV4cCI6MTY5OTc0MTE5OH0.dxRpnqegZkgCr57k068-Km5CcTOxM9A-JQ9QF4zfZW0".to_string(),
