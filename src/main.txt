@@ -1,0 +1,16 @@
+
+fn get_playing_metadata(player: &Option<Player>) -> Option<PlayingMetadata> {
+    match player {
+        Ok(player) => {
+            let metadata = player.get_metadata().unwrap().as_hashmap();
+
+            let title = metadata.get("fs:title").unwrap().as_str();
+            let artist = metadata.get("fs:artist").unwrap().as_str_array()[0];
+
+            let playing = PlayingMetadata { name, artist, percentage: None };
+
+            Some(playing)
+        }
+        Err(_) => None, // can't find any player
+    }
+}

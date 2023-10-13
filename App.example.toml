@@ -1,0 +1,4 @@
+# Change these values to whatever you see fit!
+tautulli_server_url = "http://your-tautulli.com/"
+tautulli_server_cookie = "tautulli_token_something_goes_here"
+username = "gamer"
