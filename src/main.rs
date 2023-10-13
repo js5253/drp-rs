@@ -46,15 +46,15 @@ struct TautulliSession {
 struct TautulliResponse {
     sessions: Vec<TautulliSession>,
 }
-fn get_playing_metadata_tautulli(config: &Config) -> Option<TautulliSession> {
+fn get_playing_metadata_tautulli(config: &AppConfig) -> Option<TautulliSession> {
     let client = Client::new();
     //let jar = Jar::default();
 
     //jar.add_cookie_str(APP_CONFIG.tautulli_server_cookie, APP_CONFIG.tautulli_server_url);
 
     let data = client
-        .get(format!("{}get_activity", &config.get_string("tautulli_server_url").unwrap()))
-        .header("Cookie", &config.get_string("tautulli_server_cookie").unwrap())
+        .get(format!("{}get_activity", &config.tautulli_server_url))
+        .header("Cookie", &config.tautulli_server_cookie)
         .send();
 
     let d = data.unwrap().json::<TautulliResponse>();
@@ -63,7 +63,7 @@ fn get_playing_metadata_tautulli(config: &Config) -> Option<TautulliSession> {
     let user_session: Vec<&TautulliSession> = binding
         .sessions
         .iter()
-        .filter(|session| session.user == config.get_string("username").unwrap())
+        .filter(|session| session.user == config.username)
         .collect();
     match user_session.len() {
         0 => return None,
@@ -86,9 +86,15 @@ fn get_playing_metadata_tautulli(config: &Config) -> Option<TautulliSession> {
 //         Err(_) => None, // can't find any player
 //     }
 // }
+
 fn main() {
     let config = Config::builder().add_source(config::File::with_name("App.toml")).build().unwrap();
-    let prev_playing = get_playing_metadata_tautulli(&config);
+    let app_config: AppConfig = AppConfig {
+        tautulli_server_url: "http://server1-stats.omniplex.club/".to_string(), //get_activity
+        tautulli_server_cookie: "tautulli_token_608ecf9fab56436b96d62243b0a05470=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMTIxOTUyMCwidXNlciI6IlByb2JhYmx5QUhhY2hlciIsInVzZXJfZ3JvdXAiOiJndWVzdCIsImV4cCI6MTY5OTc0MTE5OH0.dxRpnqegZkgCr57k068-Km5CcTOxM9A-JQ9QF4zfZW0".to_string(),
+        username: "ProbablyAHacher".to_string()
+    };
+    let prev_playing = get_playing_metadata_tautulli(&app_config);
     let mut ipc_client = DiscordIpcClient::new("1162169068418248764").unwrap();
     ipc_client.connect().unwrap();
 
@@ -101,12 +107,14 @@ fn main() {
         let _ = ipc_client
                 .set_activity(
                     Activity::new()
-                        .state(&format!("► {} - {}", full_title, state))
+                        .state(&format!("{} {} - {}", get_playback_sign(&state), full_title, state))
+                        // .details(&(media_type + " - " + &(percent.to_string() + "% played")))
+
                 )
                 .unwrap();
     };
     loop {
-        let playing: Option<TautulliSession> = get_playing_metadata_tautulli(&config);
+        let playing: Option<TautulliSession> = get_playing_metadata_tautulli(&app_config);
         if playing == None {
             let _ = ipc_client.clear_activity();
         }
@@ -119,12 +127,15 @@ fn main() {
             let _ = ipc_client
                 .set_activity(
                     Activity::new()
-                        .state(&format!("{} {} - {}", get_playback_sign(&state), full_title, state))
-                        .details(&(media_type + " - " + &(percent.to_string() + "% played")))
-                        .buttons(vec![Button::new("View Details", &(String::from("https://www.justwatch.com/us/search?q=") + &encode(&full_title)))])
+                    .state(&(media_type + " - " + &(percent.to_string() + "% played")))
+                        .details(&format!("{} {} - {}", get_playback_sign(&state), full_title, state))
+                        .buttons(vec![
+                            Button::new("View Details", &(String::from("https://www.justwatch.com/us/search?q=") + &encode(&full_title))),
+                            //Button::new("View on Plex", &(String::from("https://app.plex.tv/desktop/#!/search?q=") + &encode(&full_title)))
+                            ])
                 )
                 .unwrap();
         }
-        thread::sleep(Duration::from_secs(3))
+        thread::sleep(Duration::from_secs(4))
     }
 }
