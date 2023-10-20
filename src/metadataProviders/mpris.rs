@@ -9,15 +9,17 @@ pub fn get_playing_metadata() -> Option<MetadataProvider> {
     
     match player {
         Ok(player) => {
+            let status = player.get_playback_status().unwrap();
+            let progress = player.get_position().unwrap();
             let metadata = player.get_metadata().unwrap();
             let metadata = metadata.as_hashmap();
-            println!("{:?}", metadata);
+            // println!("{:?}", metadata);
 
             Some(MetadataProvider {
-                title: format!("{} - {}", metadata.get("xesam:title").unwrap().as_str().unwrap().to_string(), metadata.get("xesam:artist").unwrap().as_str_array().unwrap()[0]),
+                title: format!("{} - {}", metadata.get("xesam:title").unwrap().as_str().unwrap().to_string(), metadata.get("xesam:artist").unwrap().as_str_array().unwrap().join(", ")),
                 aux_title: Some(metadata.get("xesam:album").unwrap().as_str().unwrap().to_string()),
                 playback_state: None,
-                progress: None,
+                progress: Some(progress),
                 state: None,
                 providerName: String::from("MPRIS provider"),
                 subproviderName: Some(player.identity().to_string()),
