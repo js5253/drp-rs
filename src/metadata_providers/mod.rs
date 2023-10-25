@@ -31,5 +31,6 @@ pub trait MetadataProvider {
 }
 
 pub mod tautulli;
-pub mod mpris;
+pub mod mpris;  
 pub mod windows;
+pub mod mac;

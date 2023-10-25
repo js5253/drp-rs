@@ -1,10 +1,9 @@
 use std::{thread, time::Duration};
 
 use config::Config;
-use reqwest::blocking::Client;
 
-mod metadataProviders;
-use metadataProviders::{mpris::{self, MprisParser}, tautulli, MetadataProvider, windows::WindowsParser};
+mod metadata_providers;
+use metadata_providers::{mpris::MprisParser, MetadataProvider, windows::WindowsParser};
 
 fn get_playback_sign(status: &str) -> &str {
     match status {
@@ -13,25 +12,13 @@ fn get_playback_sign(status: &str) -> &str {
         _ => "",
     }
 }
-struct PlayingMetadata {
-    name: String,
-    artist: String,
-    percentage: Option<u8>,
-}
-use crate::metadataProviders::tautulli::TautulliSession;
+
 use discord_rich_presence::{
-    activity::{self, Activity, Assets, Button, Timestamps},
+    activity::{Activity, Assets},
     DiscordIpc, DiscordIpcClient,
 };
 use lazy_static::lazy_static;
-use serde::Deserialize;
-use urlencoding::encode;
 
-pub struct AppConfig {
-    tautulli_server_url: String,
-    tautulli_server_cookie: String,
-    username: String,
-}
 // fn get_playing_metadata(player: &Option<Player>) -> Option<PlayingMetadata> {
 //     match player {
 //         Ok(player) => {
@@ -73,7 +60,8 @@ lazy_static! {
 }
 
 fn main() {
-    let prev_playing = get_default_provider().unwrap().get_playing_metadata().unwrap();
+    let prev_playing = get_default_provider().unwrap();
+    let prev_playing = prev_playing.get_playing_metadata().unwrap();
     println!(
         "Settings loaded: {}",
         SETTINGS.get_string("username").unwrap()
@@ -82,16 +70,10 @@ fn main() {
     ipc_client.connect().unwrap();
     let mut time_elapsed: u64 = 0;
 
-    // let _ = ipc_client.set_activity(Activity::new()
-    // .details(&format!("{} - {}", prev_playing.title, prev_playing.aux_title.clone().unwrap()))
-    // // .assets(Assets::new().large_image(&prev_playing.metadata_media.clone().unwrap()))
-    // .state(format!("{} played - {}", pretty_time(time_elapsed), &prev_playing.subproviderName.clone().unwrap()).as_str()))
-    // .unwrap();
-
     println!("Discord Playing Thing");
     loop {
-        let curr_playing = get_default_provider().unwrap().get_playing_metadata();
-        let curr_playing = curr_playing.unwrap();
+        let curr_playing = get_default_provider().unwrap();
+        let curr_playing = curr_playing.get_playing_metadata().unwrap();
         if prev_playing != curr_playing {
             time_elapsed = 0;
         }

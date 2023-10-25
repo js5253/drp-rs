@@ -2,21 +2,28 @@
 use mpris::{self, PlayerFinder};
 #[cfg(target_os = "linux")]
 
-use crate::metadataProviders::MediaType;
+use crate::metadata_providers::MediaType;
 use super::MetadataProvider;
 #[cfg(target_os = "linux")]
 use super::MetadataProvider;
 
+macro_rules! platform_implementation {
+    () => {
+        
+    };
+}
+
 #[derive(Default)]
 pub struct MprisParser {
-
 }
+
 #[cfg(not(target_os="linux"))] 
 impl MetadataProvider for MprisParser {
     fn get_playing_metadata(&self) -> Option<super::Metadata> {
         None
     }
 }
+
 #[cfg(target_os="linux")]
 impl MetadataProvider for MprisParser {
     fn get_playing_metadata(&self) -> Option<MetadataProvider> {
