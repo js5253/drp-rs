@@ -4,7 +4,7 @@ use config::Config;
 use reqwest::blocking::Client;
 
 mod metadataProviders;
-use metadataProviders::{mpris, tautulli, MetadataProvider};
+use metadataProviders::{mpris::{self, MprisParser}, tautulli, MetadataProvider, windows::WindowsParser};
 
 fn get_playback_sign(status: &str) -> &str {
     match status {
@@ -18,14 +18,14 @@ struct PlayingMetadata {
     artist: String,
     percentage: Option<u8>,
 }
+use crate::metadataProviders::tautulli::TautulliSession;
 use discord_rich_presence::{
-    activity::{self, Activity, Button, Timestamps, Assets},
+    activity::{self, Activity, Assets, Button, Timestamps},
     DiscordIpc, DiscordIpcClient,
 };
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use urlencoding::encode;
-use crate::metadataProviders::tautulli::TautulliSession;
 
 pub struct AppConfig {
     tautulli_server_url: String,
@@ -47,11 +47,15 @@ pub struct AppConfig {
 //         Err(_) => None, // can't find any player
 //     }
 // }
-fn get_all_providers() -> Vec<MetadataProvider> {
-    // in the meantime, use only the first metadata provider.
-    let mut providers = vec![mpris::get_playing_metadata().unwrap()];
-
-    providers
+fn get_default_provider() -> Option<Box<dyn MetadataProvider>> {
+// in the meantime, use only the first metadata provider.
+if cfg!(linux) {
+        Some(Box::new(MprisParser{}))
+    } else if cfg!(windows) {
+        Some(Box::new(WindowsParser{}))
+    } else {
+        return None
+    }
 }
 
 fn pretty_time(dur: Duration) -> String {
@@ -61,15 +65,19 @@ fn pretty_time(dur: Duration) -> String {
     format!("{:02}:{:02}", minutes, remaining_seconds)
 }
 
-
 lazy_static! {
-    pub static ref SETTINGS: Config = Config::builder().add_source(config::File::with_name("App")).build().unwrap();
-
+    pub static ref SETTINGS: Config = Config::builder()
+        .add_source(config::File::with_name("App"))
+        .build()
+        .unwrap();
 }
 
 fn main() {
-    let prev_playing = &get_all_providers()[0];
-    println!("Settings loaded: {}", SETTINGS.get_string("username").unwrap());
+    let prev_playing = get_default_provider().unwrap().get_playing_metadata().unwrap();
+    println!(
+        "Settings loaded: {}",
+        SETTINGS.get_string("username").unwrap()
+    );
     let mut ipc_client = DiscordIpcClient::new("1162169068418248764").unwrap();
     ipc_client.connect().unwrap();
     let mut time_elapsed: u64 = 0;
@@ -82,20 +90,40 @@ fn main() {
 
     println!("Discord Playing Thing");
     loop {
-        let curr_playing = &get_all_providers()[0];
+        let curr_playing = get_default_provider().unwrap().get_playing_metadata();
+        let curr_playing = curr_playing.unwrap();
         if prev_playing != curr_playing {
             time_elapsed = 0;
         }
-            let _ = ipc_client.set_activity(Activity::new()
-            .assets(
-            Assets::new().large_image("https://cdn.frankerfacez.com/emoticon/660211/4")
-            .small_image("https://cdn.frankerfacez.com/emoticon/660211/4"))
-            .details(&format!("{} - {}", curr_playing.title, curr_playing.aux_title.clone().unwrap()))
-            // .assets(Assets::new().large_image(&curr_playing.metadata_media.clone().unwrap()))
-            .state(format!("{} played - {}", pretty_time(curr_playing.progress.unwrap_or(Duration::from_secs(time_elapsed))), &curr_playing.subproviderName.clone().unwrap()).as_str()))
+        let _ = ipc_client
+            .set_activity(
+                Activity::new()
+                    .assets(
+                        Assets::new()
+                            .large_image("https://cdn.frankerfacez.com/emoticon/660211/4")
+                            .small_image("https://cdn.frankerfacez.com/emoticon/660211/4"),
+                    )
+                    .details(&format!(
+                        "{} - {}",
+                        curr_playing.title,
+                        curr_playing.aux_title.clone().unwrap()
+                    ))
+                    // .assets(Assets::new().large_image(&curr_playing.metadata_media.clone().unwrap()))
+                    .state(
+                        format!(
+                            "{} played",
+                            pretty_time(
+                                curr_playing
+                                    .progress
+                                    .unwrap_or(Duration::from_secs(time_elapsed))
+                            )
+                        )
+                        .as_str(),
+                    ),
+            )
             .unwrap();
         //}
         time_elapsed += 3;
         thread::sleep(Duration::from_secs(3))
-            }
-        }
+    }
+}
