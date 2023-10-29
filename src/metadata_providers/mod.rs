@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use ::windows::Media::MediaPlaybackType;
+
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PlaybackState {
@@ -11,7 +13,19 @@ pub enum PlaybackState {
 pub enum MediaType {
     AUDIO,
     VIDEO,
-    MIXED
+    MIXED,
+    UNKNOWN
+}
+#[cfg(target_os="windows")]
+impl From<MediaPlaybackType> for MediaType {
+    fn from(value: MediaPlaybackType) -> Self {
+        match value {
+            MediaPlaybackType(1) => MediaType::VIDEO,
+            MediaPlaybackType(2) => MediaType::AUDIO,
+            _ => MediaType::UNKNOWN
+        }
+
+    }
 }
 #[derive(Debug, PartialEq)]
 pub struct Metadata {
