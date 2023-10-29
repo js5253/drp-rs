@@ -50,7 +50,6 @@ impl MetadataProvider for TautulliParser {
                 return Some(Metadata { 
                 title: String::new(),
                 aux_title: None,
-                playback_state: None,
                 progress: None,
                 state: None,
                 provider_name: todo!(),

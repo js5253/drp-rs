@@ -20,10 +20,14 @@ impl MetadataProvider for WindowsParser {
 }
 #[cfg(target_os="windows")]
 async fn get_playback_metadata() -> Option<super::Metadata> {
+    use crate::metadata_providers::PlaybackState;
+
     let a = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().unwrap().await.unwrap();
     let current_session = a.GetCurrentSession().unwrap();
+    // let playback_time = current_session.GetTimelineProperties().unwrap().EndTime().unwrap();
+    let playback_status = PlaybackState::from(current_session.GetPlaybackInfo().unwrap().PlaybackStatus().unwrap());
     let playback_info = current_session.TryGetMediaPropertiesAsync().unwrap().await.unwrap();
-    
+
     let title = playback_info.Title().unwrap().to_string();
     let artist = playback_info.Artist().unwrap().to_string();
     let media_type = MediaType::from(playback_info.PlaybackType().unwrap().Value().unwrap());
@@ -35,9 +39,8 @@ async fn get_playback_metadata() -> Option<super::Metadata> {
     Some(super::Metadata {
         title,
         aux_title: Some(artist),
-        playback_state: None,
+        state: Some(playback_status),
         progress: None,
-        state: None,
         provider_name: "Windows Media".to_string(),
         subprovider_name: None,
         media_type: media_type,

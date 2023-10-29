@@ -27,7 +27,7 @@ impl MetadataProvider for MprisParser {
 #[cfg(target_os="linux")]
 impl MetadataProvider for MprisParser {
     fn get_playing_metadata(&self) -> Option<MetadataProvider> {
-        let player = PlayerFinder::new().unwrap().find_first();
+        let player = PlayerFinder::new()?.find_first();
         
         match player {
             Ok(player) => {
