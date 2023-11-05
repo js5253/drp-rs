@@ -5,7 +5,7 @@ Discord Rich Presence is a tool that lets you update your Discord playing status
 | OS | Supported? |
 | --- | --- |
 | Linux | yes |
-| Windows | planned |
+| Windows | mostly |
 | Mac | maybe? |
 
 ## Config
