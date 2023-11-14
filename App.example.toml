@@ -1,4 +1,7 @@
-# Change these values to whatever you see fit!
-tautulli_server_url = "http://your-tautulli.com/"
-tautulli_server_cookie = "tautulli_token_something_goes_here"
-username = "gamer"
+discord_username = "gamer"
+parsers = ["extension", "tautulli", "native_now_playing"]
+
+[tautulli]
+tautulli_server_url = "http://server1.example.com"
+tautulli_server_cookie = "" # enter your cookie here after logging into tautulli
+

@@ -19,7 +19,7 @@ impl MetadataProvider for WindowsParser {
     }
 }
 #[cfg(target_os="windows")]
-async fn get_playback_metadata() -> Option<super::Metadata> {
+async fn get_playback_metadata() -> Result<Option<super::Metadata>> {
     use crate::metadata_providers::PlaybackState;
 
     let a = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().unwrap().await.unwrap();

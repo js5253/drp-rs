@@ -29,10 +29,10 @@ impl MetadataProvider for TautulliParser {
         //jar.add_cookie_str(APP_CONFIG.tautulli_server_cookie, APP_CONFIG.tautulli_server_url);
     
         let data = client
-            .get(format!("{}get_activity", SETTINGS.get_string("tautulli_server_url").unwrap()))
+            .get(format!("{}get_activity", &SETTINGS.tautulli_server_url))
     
             .header("User-Agent", "drp-rs tautulli status 0.1")
-            .header("Cookie", SETTINGS.get_string("tautulli_server_cookie").unwrap())
+            .header("Cookie", &SETTINGS.tautulli_server_cookie)
             .send();
     
         let d = data.unwrap().json::<TautulliResponse>();
@@ -41,7 +41,7 @@ impl MetadataProvider for TautulliParser {
         let user_session: Vec<&TautulliSession> = binding
             .sessions
             .iter()
-            .filter(|session| session.user == SETTINGS.get_string("username").unwrap())
+            .filter(|session| session.user == SETTINGS.discord_username)
             .collect();
         match user_session.len() {
             0 => return None,

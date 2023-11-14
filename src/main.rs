@@ -1,9 +1,9 @@
 use std::{thread, time::Duration};
 
-use config::Config;
+use config::{Config, ConfigError};
 
 mod metadata_providers;
-use metadata_providers::{mpris::MprisParser, MetadataProvider, windows::WindowsParser};
+use metadata_providers::{mpris::MprisParser, windows::WindowsParser, MetadataProvider};
 
 fn get_playback_sign(status: &str) -> &str {
     match status {
@@ -18,6 +18,9 @@ use discord_rich_presence::{
     DiscordIpc, DiscordIpcClient,
 };
 use lazy_static::lazy_static;
+use serde::Deserialize;
+
+use crate::metadata_providers::extension;
 
 // fn get_playing_metadata(player: &Option<Player>) -> Option<PlayingMetadata> {
 //     match player {
@@ -34,14 +37,33 @@ use lazy_static::lazy_static;
 //         Err(_) => None, // can't find any player
 //     }
 // }
+
+#[derive(Deserialize, Debug)]
+pub struct AppSettings {
+    discord_username: String,
+    tautulli_server_url: String,
+    tautulli_server_cookie: String,
+    parsers: Vec<String>,
+}
+impl AppSettings {
+    pub fn new() -> Result<Self, ConfigError> {
+        let s = Config::builder()
+            .add_source(config::File::with_name("App"))
+            .build()
+            .unwrap();
+
+        s.try_deserialize()
+    }
+}
+
 fn get_default_provider() -> Option<Box<dyn MetadataProvider>> {
-// in the meantime, use only the first metadata provider.
-if cfg!(linux) {
-        Some(Box::new(MprisParser{}))
+    // in the meantime, use only the first metadata provider.
+    if cfg!(linux) {
+        Some(Box::new(MprisParser {}))
     } else if cfg!(windows) {
-        Some(Box::new(WindowsParser{}))
+        Some(Box::new(WindowsParser {}))
     } else {
-        return None
+        return None;
     }
 }
 
@@ -53,59 +75,75 @@ fn pretty_time(dur: Duration) -> String {
 }
 
 lazy_static! {
-    pub static ref SETTINGS: Config = Config::builder()
-        .add_source(config::File::with_name("App"))
-        .build()
-        .unwrap();
+    pub static ref SETTINGS: AppSettings = AppSettings::new().expect("Config file is incorrect.");
 }
 
-fn main() {
-    let prev_playing = get_default_provider().unwrap();
-    let prev_playing = prev_playing.get_playing_metadata().unwrap();
-    println!(
-        "Settings loaded: {}",
-        SETTINGS.get_string("username").unwrap()
-    );
-    let mut ipc_client = DiscordIpcClient::new("1162169068418248764").unwrap();
-    ipc_client.connect().unwrap();
-    let mut time_elapsed: u64 = 0;
+// #[tokio::main]
+// async fn main() {
+//     extension::main();
+//     thread::spawn(|| {
 
-    println!("Discord Playing Thing");
+//     }).join();
+
+#[tokio::main]
+async fn main() {
+    println!("{:?}", SETTINGS.parsers);
+
+    if SETTINGS.parsers.contains(&"extension".to_string()) {
+        tokio::spawn(extension::main());
+        // extension::main().await;
+    }
     loop {
-        let curr_playing = get_default_provider().unwrap();
-        let curr_playing = curr_playing.get_playing_metadata().unwrap();
-        if prev_playing != curr_playing {
-            time_elapsed = 0;
-        }
-        let _ = ipc_client
-            .set_activity(
-                Activity::new()
-                    .assets(
-                        Assets::new()
-                            .large_image("https://cdn.frankerfacez.com/emoticon/660211/4")
-                            .small_image("https://cdn.frankerfacez.com/emoticon/660211/4"),
-                    )
-                    .details(&format!(
-                        "{} - {}",
-                        curr_playing.title,
-                        curr_playing.aux_title.clone().unwrap()
-                    ))
-                    // .assets(Assets::new().large_image(&curr_playing.metadata_media.clone().unwrap()))
-                    .state(
-                        format!(
-                            "{} played",
-                            pretty_time(
-                                curr_playing
-                                    .progress
-                                    .unwrap_or(Duration::from_secs(time_elapsed))
+        let mut ipc_client: DiscordIpcClient =
+            DiscordIpcClient::new("1162169068418248764").expect("Could not connect to Discord");
+        ipc_client.connect().unwrap();
+        let mut time_elapsed: u64 = 0;
+
+        println!("Something here...");
+        let prev_playing = get_default_provider();
+
+        match prev_playing {
+            Some(prev_playing) => {
+                println!("Discord Playing Thing");
+                loop {
+                    if let Some(playing_metadata) = prev_playing.get_playing_metadata() {
+                        let _ = ipc_client
+                            .set_activity(
+                                Activity::new()
+                                    .assets(
+                                        Assets::new()
+                                            .large_image(
+                                                "https://cdn.frankerfacez.com/emoticon/660211/4",
+                                            )
+                                            .small_image(
+                                                "https://cdn.frankerfacez.com/emoticon/660211/4",
+                                            ),
+                                    )
+                                    .details(&format!(
+                                        "{} - {}",
+                                        &playing_metadata.title,
+                                        &playing_metadata.aux_title.unwrap_or_default()
+                                    ))
+                                    // .assets(Assets::new().large_image(&curr_playing.metadata_media.clone().unwrap()))
+                                    .state(
+                                        format!(
+                                            "{} played",
+                                            pretty_time(
+                                                playing_metadata
+                                                    .progress
+                                                    .unwrap_or(Duration::from_secs(time_elapsed))
+                                            )
+                                        )
+                                        .as_str(),
+                                    ),
                             )
-                        )
-                        .as_str(),
-                    ),
-            )
-            .unwrap();
-        //}
-        time_elapsed += 3;
-        thread::sleep(Duration::from_secs(3))
+                            .unwrap();
+                    };
+                    time_elapsed += 3;
+                    thread::sleep(Duration::from_secs(3));
+                }
+            }
+            None => {}
+        }
     }
 }
