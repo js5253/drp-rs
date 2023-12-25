@@ -53,6 +53,26 @@ pub struct Metadata {
 pub trait MetadataProvider {
     fn get_playing_metadata(&self) -> Option<Metadata>;
 }
+#[macro_export]
+macro_rules! platform_implementation {
+    ($platform:literal $($code:tt)*) => {
+        {
+        #[cfg(target_os=$platform)] {
+            impl MetadataProvider for MprisParser {
+            fn get_playing_metadata(&self) -> Option<super::Metadata> {
+                $($code)*
+            }
+        }
+        #[cfg(not(target_os=$platform))] {
+            fn get_playing_metadata(&self) -> Option<super::Metadata> {
+                None
+            }
+        }
+        }
+    };
+}
+}
+
 pub mod mac;
 pub mod mpris;
 pub mod extension;

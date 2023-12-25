@@ -5,7 +5,7 @@ use futures::executor;
 use windows::Media::{self, Control::{GlobalSystemMediaTransportControlsSession, GlobalSystemMediaTransportControlsSessionManager}, MediaPlaybackType};
 
 enum PlaybackType {
-    UNKNOWN = 0,
+    UNKNOWN,
     MUSIC = 1,
     VIDEO = 2
 }

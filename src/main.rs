@@ -3,6 +3,7 @@ use std::{thread, time::Duration};
 use config::{Config, ConfigError};
 
 mod metadata_providers;
+use fltk::{window::{Window}, app::{App, self}, prelude::*, input::{self, Input}, button::Button, text::TextDisplay, enums::Event};
 use metadata_providers::{mpris::MprisParser, windows::WindowsParser, MetadataProvider};
 
 fn get_playback_sign(status: &str) -> &str {
@@ -85,65 +86,93 @@ lazy_static! {
 
 //     }).join();
 
-#[tokio::main]
-async fn main() {
-    println!("{:?}", SETTINGS.parsers);
+// #[tokio::main]
+ fn main() {
 
-    if SETTINGS.parsers.contains(&"extension".to_string()) {
-        tokio::spawn(extension::main());
-        // extension::main().await;
-    }
-    loop {
-        let mut ipc_client: DiscordIpcClient =
-            DiscordIpcClient::new("1162169068418248764").expect("Could not connect to Discord");
-        ipc_client.connect().unwrap();
-        let mut time_elapsed: u64 = 0;
+    let width = 200;
+    let height = 30;
 
-        println!("Something here...");
-        let prev_playing = get_default_provider();
+    let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
+    let mut wind = Window::default().with_size(400, 300).center_screen();
 
-        match prev_playing {
-            Some(prev_playing) => {
-                println!("Discord Playing Thing");
-                loop {
-                    if let Some(playing_metadata) = prev_playing.get_playing_metadata() {
-                        let _ = ipc_client
-                            .set_activity(
-                                Activity::new()
-                                    .assets(
-                                        Assets::new()
-                                            .large_image(
-                                                "https://cdn.frankerfacez.com/emoticon/660211/4",
-                                            )
-                                            .small_image(
-                                                "https://cdn.frankerfacez.com/emoticon/660211/4",
-                                            ),
-                                    )
-                                    .details(&format!(
-                                        "{} - {}",
-                                        &playing_metadata.title,
-                                        &playing_metadata.aux_title.unwrap_or_default()
-                                    ))
-                                    // .assets(Assets::new().large_image(&curr_playing.metadata_media.clone().unwrap()))
-                                    .state(
-                                        format!(
-                                            "{} played",
-                                            pretty_time(
-                                                playing_metadata
-                                                    .progress
-                                                    .unwrap_or(Duration::from_secs(time_elapsed))
-                                            )
-                                        )
-                                        .as_str(),
-                                    ),
-                            )
-                            .unwrap();
-                    };
-                    time_elapsed += 3;
-                    thread::sleep(Duration::from_secs(3));
-                }
-            }
-            None => {}
-        }
-    }
+
+    let mut tautulli_token_textbox = Input::default().with_label("Tautulli Server Cookie").with_size(width, height).center_of_parent();
+    let _ = &tautulli_token_textbox.set_value(&SETTINGS.tautulli_server_cookie);
+
+    let mut cb =  |but: &mut Button| {
+        println!("Hello world");
+        
+    };
+    let mut save_button = Button::default().with_label("Save Changes").with_size(width, height).below_of(&tautulli_token_textbox, 10);
+    let _ = &save_button.set_callback(cb);
+
+
+
+
+
+    wind.add(&tautulli_token_textbox);
+    wind.add(&save_button);
+
+    wind.end();
+    wind.show();
+    app.run().unwrap();
+    // println!("{:?}", SETTINGS.parsers);
+
+    // if SETTINGS.parsers.contains(&"extension".to_string()) {
+    //     tokio::spawn(extension::main());
+    //     // extension::main().await;
+    // }
+    // loop {
+    //     let mut ipc_client: DiscordIpcClient =
+    //         DiscordIpcClient::new("1162169068418248764").expect("Could not connect to Discord");
+    //     ipc_client.connect().unwrap();
+    //     let mut time_elapsed: u64 = 0;
+
+    //     println!("Something here...");
+    //     let prev_playing = get_default_provider();
+
+    //     match prev_playing {
+    //         Some(prev_playing) => {
+    //             println!("Discord Playing Thing");
+    //             loop {
+    //                 if let Some(playing_metadata) = prev_playing.get_playing_metadata() {
+    //                     let _ = ipc_client
+    //                         .set_activity(
+    //                             Activity::new()
+    //                                 .assets(
+    //                                     Assets::new()
+    //                                         .large_image(
+    //                                             "https://cdn.frankerfacez.com/emoticon/660211/4",
+    //                                         )
+    //                                         .small_image(
+    //                                             "https://cdn.frankerfacez.com/emoticon/660211/4",
+    //                                         ),
+    //                                 )
+    //                                 .details(&format!(
+    //                                     "{} - {}",
+    //                                     &playing_metadata.title,
+    //                                     &playing_metadata.aux_title.unwrap_or_default()
+    //                                 ))
+    //                                 // .assets(Assets::new().large_image(&curr_playing.metadata_media.clone().unwrap()))
+    //                                 .state(
+    //                                     format!(
+    //                                         "{} played",
+    //                                         pretty_time(
+    //                                             playing_metadata
+    //                                                 .progress
+    //                                                 .unwrap_or(Duration::from_secs(time_elapsed))
+    //                                         )
+    //                                     )
+    //                                     .as_str(),
+    //                                 ),
+    //                         )
+    //                         .unwrap();
+    //                 };
+    //                 time_elapsed += 3;
+    //                 thread::sleep(Duration::from_secs(3));
+    //             }
+    //         }
+    //         None => {}
+    //     }
+    // }
 }
