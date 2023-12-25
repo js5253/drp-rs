@@ -1,8 +1,8 @@
-use std::thread::current;
 
-use super::{MetadataProvider, Metadata, MediaType};
-use futures::executor;
-use windows::Media::{self, Control::{GlobalSystemMediaTransportControlsSession, GlobalSystemMediaTransportControlsSessionManager}, MediaPlaybackType};
+
+use super::{MetadataProvider};
+
+
 
 enum PlaybackType {
     UNKNOWN,

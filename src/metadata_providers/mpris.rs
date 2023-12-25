@@ -22,7 +22,7 @@ impl MetadataProvider for MprisParser {
         
         match player {
             Ok(player) => {
-                let status = player.get_playback_status().unwrap();
+                let _status = player.get_playback_status().unwrap();
                 let progress = player.get_position().unwrap();
                 let metadata = player.get_metadata().unwrap();
                 let metadata = metadata.as_hashmap();

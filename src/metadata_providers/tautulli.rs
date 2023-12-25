@@ -46,7 +46,7 @@ impl MetadataProvider for TautulliParser {
         match user_session.len() {
             0 => return None,
             _ => {
-                let session = user_session[0];
+                let _session = user_session[0];
                 return Some(Metadata { 
                 title: String::new(),
                 aux_title: None,

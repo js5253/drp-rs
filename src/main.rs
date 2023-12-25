@@ -1,9 +1,9 @@
-use std::{thread, time::Duration};
+use std::{time::Duration};
 
 use config::{Config, ConfigError};
 
 mod metadata_providers;
-use fltk::{window::{Window}, app::{App, self}, prelude::*, input::{self, Input}, button::Button, text::TextDisplay, enums::Event};
+use fltk::{window::{Window}, app::{self}, prelude::*, input::{Input}, button::Button};
 use metadata_providers::{mpris::MprisParser, windows::WindowsParser, MetadataProvider};
 
 fn get_playback_sign(status: &str) -> &str {
@@ -14,14 +14,11 @@ fn get_playback_sign(status: &str) -> &str {
     }
 }
 
-use discord_rich_presence::{
-    activity::{Activity, Assets},
-    DiscordIpc, DiscordIpcClient,
-};
+
 use lazy_static::lazy_static;
 use serde::Deserialize;
 
-use crate::metadata_providers::extension;
+
 
 // fn get_playing_metadata(player: &Option<Player>) -> Option<PlayingMetadata> {
 //     match player {
@@ -99,7 +96,7 @@ lazy_static! {
     let mut tautulli_token_textbox = Input::default().with_label("Tautulli Server Cookie").with_size(width, height).center_of_parent();
     let _ = &tautulli_token_textbox.set_value(&SETTINGS.tautulli_server_cookie);
 
-    let mut cb =  |but: &mut Button| {
+    let cb =  |_but: &mut Button| {
         println!("Hello world");
         
     };

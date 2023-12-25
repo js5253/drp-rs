@@ -1,8 +1,6 @@
 use std::time::Duration;
 
-use ::windows::Media::{
-    Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus, MediaPlaybackType,
-};
+
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PlaybackState {
