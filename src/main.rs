@@ -1,11 +1,10 @@
-use std::{time::Duration};
+use std::{time::Duration, fs, sync::Arc};
 
 use config::{Config, ConfigError};
-
 mod metadata_providers;
-use fltk::{window::{Window}, app::{self}, prelude::*, input::{Input}, button::Button};
+use fltk::{text::TextDisplay ,window::{Window}, app::{self}, prelude::*, input::{Input}, button::Button};
 use metadata_providers::{mpris::MprisParser, windows::WindowsParser, MetadataProvider};
-
+use toml;
 fn get_playback_sign(status: &str) -> &str {
     match status {
         "paused" => "⏸︎",
@@ -16,7 +15,7 @@ fn get_playback_sign(status: &str) -> &str {
 
 
 use lazy_static::lazy_static;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 
 
@@ -36,7 +35,7 @@ use serde::Deserialize;
 //     }
 // }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize, Clone)]
 pub struct AppSettings {
     discord_username: String,
     tautulli_server_url: String,
@@ -51,6 +50,10 @@ impl AppSettings {
             .unwrap();
 
         s.try_deserialize()
+    }
+    pub fn write(&self) -> Result<Self, ConfigError> {
+        let config_file = fs::write("App.toml", toml::to_string(&self).expect("Couldn't write settings back to file..."));
+        Ok(self.clone())
     }
 }
 
@@ -85,23 +88,35 @@ lazy_static! {
 
 // #[tokio::main]
  fn main() {
-
-    let width = 200;
+    let settings AppSettings::new().expect("Error loading app settings.");
+    let width = 300;
     let height = 30;
 
     let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
-    let mut wind = Window::default().with_size(400, 300).center_screen();
+    let mut wind = Window::default().with_size(500, 200).center_screen();
 
+    let mut save_label = TextDisplay::default().with_pos(150, 25).with_label("App needs to quit after making changes.");
+    let mut tautulli_token_textbox = Input::default().with_label("Tautulli Cookie").with_size(width, height).below_of(&save_label, 2);
+    let mut tautulli_token_state = String::from(&SETTINGS.tautulli_server_cookie);
+    let _ = &tautulli_token_textbox.set_value(&tautulli_token_state);
+    &tautulli_token_textbox.set_callback(move |data| {
+        tautulli_token_state = data.value();
+    });
 
-    let mut tautulli_token_textbox = Input::default().with_label("Tautulli Server Cookie").with_size(width, height).center_of_parent();
-    let _ = &tautulli_token_textbox.set_value(&SETTINGS.tautulli_server_cookie);
+    let mut jellyfin_token_textbox = Input::default().with_label("Jellyfin Cookie").with_size(width, height).below_of(&tautulli_token_textbox, 2);
+    let mut jellyfin_token_state = String::new();
+    &jellyfin_token_textbox.set_callback(move |data| {
+        jellyfin_token_state = data.value();
+    });
+    // let _ = &tautulli_token_textbox.
 
-    let cb =  |_but: &mut Button| {
-        println!("Hello world");
+    let cb =  |button| {
+        println!("{}, {}", &jellyfin_token_state, &tautulli_token_state);
         
+
     };
-    let mut save_button = Button::default().with_label("Save Changes").with_size(width, height).below_of(&tautulli_token_textbox, 10);
-    let _ = &save_button.set_callback(cb);
+    let mut save_button = Button::default().with_label("Save Changes").with_size(width, height).below_of(&jellyfin_token_textbox, 10);
+    &save_button.set_callback(cb);
 
 
 

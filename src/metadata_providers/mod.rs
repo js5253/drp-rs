@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+// use windows::Media::{MediaPlaybackType, Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus};
+use ::windows::Media::{MediaPlaybackType, Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus};
 
 
 #[derive(Debug, PartialEq, Eq)]

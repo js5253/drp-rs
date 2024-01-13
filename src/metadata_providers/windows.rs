@@ -1,5 +1,7 @@
 
 
+use futures::executor;
+
 use super::{MetadataProvider};
 
 
@@ -13,14 +15,18 @@ enum PlaybackType {
 #[derive(Default)]
 pub struct WindowsParser {}
 #[cfg(not(target_os="windows"))] 
-impl MetadataProvider for WindowsParser {
-    fn get_playing_metadata(&self) -> Option<super::Metadata> {
-        None
+    impl MetadataProvider for WindowsParser {
+        fn get_playing_metadata(&self) -> Option<super::Metadata> {
+            None
+        }
     }
-}
+
+
 #[cfg(target_os="windows")]
-async fn get_playback_metadata() -> Result<Option<super::Metadata>> {
-    use crate::metadata_providers::PlaybackState;
+async fn get_playback_metadata() -> Option<super::Metadata> {
+    use windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager;
+
+    use crate::metadata_providers::{PlaybackState, MediaType};
 
     let a = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().unwrap().await.unwrap();
     let current_session = a.GetCurrentSession().unwrap();
