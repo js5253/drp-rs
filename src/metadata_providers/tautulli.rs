@@ -20,7 +20,7 @@ pub struct TautulliSession {
 struct TautulliResponse {
     sessions: Vec<TautulliSession>,
 }
-struct TautulliParser {}
+struct TautulliParser;
 impl MetadataProvider for TautulliParser {
     fn get_playing_metadata(&self) -> Option<Metadata> {
         let client = Client::new();
@@ -46,14 +46,14 @@ impl MetadataProvider for TautulliParser {
         match user_session.len() {
             0 => return None,
             _ => {
-                let _session = user_session[0];
+                let session = user_session[0];
                 return Some(Metadata { 
-                title: String::new(),
-                aux_title: None,
+                title: session.full_title.clone(),
+                aux_title: Some(session.full_title.clone()),
                 progress: None,
                 state: None,
-                provider_name: todo!(),
-                subprovider_name: todo!(),
+                provider_name: String::from("Plex"),
+                subprovider_name: None,
                 media_type: MediaType::MIXED,
                 metadata_media: None
                 

@@ -1,10 +1,13 @@
-use config::{Config, ConfigError};
-use std::{borrow::Borrow, error::Error, fs, sync::{Arc, Mutex}, thread, time::Duration};
+mod util;
 mod metadata_providers;
+mod settings;
+use util::pretty_time;
 use discord_rich_presence::{
     activity::{Activity, Assets},
     DiscordIpc, DiscordIpcClient,
 };
+use settings::AppSettings;
+use std::{error::Error, sync::{Arc, Mutex}, thread, time::Duration};
 use fltk::{
     app::{self},
     button::Button,
@@ -14,43 +17,14 @@ use fltk::{
     window::Window,
 };
 use metadata_providers::{mpris::MprisParser, windows::WindowsParser, MetadataProvider};
-use toml;
-fn get_playback_sign(status: &str) -> &str {
-    match status {
-        "paused" => "⏸︎",
-        "playing" => "⏵︎",
-        _ => "",
-    }
-}
 
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Debug, Serialize, Clone)]
-pub struct AppSettings {
-    discord_username: String,
-    tautulli_server_url: String,
-    tautulli_server_cookie: String,
-    metadata_sources: Vec<String>,
-}
-impl AppSettings {
-    pub fn new() -> Result<Self, ConfigError> {
-        let s = Config::builder()
-            .add_source(config::File::with_name("App"))
-            .build()
-            .unwrap();
+const DELAY_TO_RECHECK: u64 = 3;
+const DISCORD_ID: &str = "1162169068418248764";
 
-        s.try_deserialize()
-    }
-    pub fn write(&self) -> Result<Self, ConfigError> {
-        let config_file = fs::write(
-            "App.toml",
-            toml::to_string(&self).expect("Couldn't write settings back to file..."),
-        );
-        Ok(self.clone())
-    }
-}
-
+const UI_DEFAULT_WIDTH: i32 = 300;
+const UI_DEFAULT_HEIGHT: i32 = 30;
 fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider>> {
     // in the meantime, use only the first metadata provider.
     if cfg!(linux) {
@@ -62,19 +36,10 @@ fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider>> {
     }
 }
 
-fn pretty_time(dur: Duration) -> String {
-    let seconds = dur.as_secs();
-    let minutes = seconds / 60;
-    let remaining_seconds = seconds % 60;
-    format!("{:02}:{:02}", minutes, remaining_seconds)
-}
-
 lazy_static! {
     pub static ref SETTINGS: AppSettings = AppSettings::new().expect("Config file is incorrect.");
 }
 
-const DEFAULT_WIDTH: i32 = 300;
-const DEFAULT_HEIGHT: i32 = 30;
 
 fn ui(thread_arc: Arc<Mutex<AppStatus>>) {
     println!("{:?}", thread_arc);
@@ -86,7 +51,7 @@ fn ui(thread_arc: Arc<Mutex<AppStatus>>) {
         .with_label("App needs to quit after making changes.");
     let mut tautulli_token_textbox = Input::default()
         .with_label("Tautulli Cookie")
-        .with_size(DEFAULT_WIDTH, DEFAULT_HEIGHT)
+        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&save_label, 2);
     let mut tautulli_token_state = String::from(&SETTINGS.tautulli_server_cookie);
     let _ = &tautulli_token_textbox.set_value(&tautulli_token_state);
@@ -96,7 +61,7 @@ fn ui(thread_arc: Arc<Mutex<AppStatus>>) {
 
     let mut jellyfin_token_textbox = Input::default()
         .with_label("Jellyfin Cookie")
-        .with_size(DEFAULT_WIDTH, DEFAULT_HEIGHT)
+        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&tautulli_token_textbox, 2);
     let mut jellyfin_token_state = String::new();
     &jellyfin_token_textbox.set_callback(move |data| {
@@ -104,11 +69,11 @@ fn ui(thread_arc: Arc<Mutex<AppStatus>>) {
     });
     let mut save_button = Button::default()
         .with_label("Save Changes")
-        .with_size(DEFAULT_WIDTH, DEFAULT_HEIGHT)
+        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&jellyfin_token_textbox, 10);
     let mut service_status_label = TextDisplay::default()
         .with_label("Service Status")
-        .with_size(DEFAULT_WIDTH, DEFAULT_HEIGHT)
+        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&save_button, 3);
     wind.add(&tautulli_token_textbox);
     wind.add(&save_button);
@@ -133,12 +98,10 @@ fn service(app_status: Arc<Mutex<AppStatus>>) -> Result<(), Box<dyn Error + Send
     {
         provider = Some(get_os_specific_provider().expect("Could not find a default provider"));
     }
-    // println!("{:?}", &thread_arc);
-    // let d = thread_arc.borrow()
 
     loop {
         let mut ipc_client: DiscordIpcClient =
-            DiscordIpcClient::new("1162169068418248764").expect("Could not connect to Discord");
+            DiscordIpcClient::new(DISCORD_ID).expect("Could not connect to Discord");
         ipc_client.connect().unwrap();
         let mut time_elapsed: u64 = 0;
 
@@ -174,8 +137,8 @@ fn service(app_status: Arc<Mutex<AppStatus>>) -> Result<(), Box<dyn Error + Send
                             ),
                     )
                     .unwrap();
-                time_elapsed += 3;
-                thread::sleep(Duration::from_secs(3));
+                time_elapsed += DELAY_TO_RECHECK;
+                thread::sleep(Duration::from_secs(DELAY_TO_RECHECK));
             }
     }
 }
@@ -187,19 +150,6 @@ enum AppStatus {
 }
 
 fn main() -> Result<(), Box<dyn Error + Send>> {
-    // let mut settings: AppSettings = AppSettings::new().expect("Error loading app settings.");
-
-    // let app_status = Arc::new(AppStatus::STOPPED);
-
-    // let thread_arc = app_status.clone();
-    // let thread_arc_2 = app_status.clone();
-
-    // settings.discord_username = "Jose Sanchez".to_string();
-
-    // let _ = thread::spawn(move || service(thread_arc).unwrap()).join();
-    // ui(thread_arc_2);
-
-    // Ok(())
     let data = Arc::new(Mutex::new(AppStatus::STOPPED));
     let a1 = Arc::clone(&data);
     let a2 = Arc::clone(&data);

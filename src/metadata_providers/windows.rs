@@ -4,8 +4,6 @@ use futures::executor;
 
 use super::{MetadataProvider};
 
-
-
 enum PlaybackType {
     UNKNOWN,
     MUSIC = 1,
