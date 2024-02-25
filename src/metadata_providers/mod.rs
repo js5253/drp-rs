@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 // use windows::Media::{MediaPlaybackType, Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus};
+#[cfg(target_os="windows")]
 use ::windows::Media::{MediaPlaybackType, Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus};
 
 
@@ -78,3 +79,4 @@ pub mod mpris;
 pub mod extension;
 pub mod tautulli;
 pub mod windows;
+pub mod tidal;

@@ -1,5 +1,5 @@
 discord_username = "gamer"
-parsers = ["extension", "tautulli", "native_now_playing"]
+metadata_sources = ["extension", "tautulli", "native_now_playing"]
 
 [tautulli]
 tautulli_server_url = "http://server1.example.com"
