@@ -2,7 +2,8 @@ use reqwest::blocking::Client;
 use serde::Deserialize;
 use serde_aux::prelude::deserialize_number_from_string;
 
-use crate::SETTINGS;
+use crate::settings::AppSettings;
+
 use super::{MetadataProvider, MediaType, Metadata};
 
 #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -22,17 +23,17 @@ struct TautulliResponse {
 }
 struct TautulliParser;
 impl MetadataProvider for TautulliParser {
-    fn get_playing_metadata(&self) -> Option<Metadata> {
+    fn get_playing_metadata(&self, settings: &AppSettings) -> Option<Metadata> {
         let client = Client::new();
         //let jar = Jar::default();
     
         //jar.add_cookie_str(APP_CONFIG.tautulli_server_cookie, APP_CONFIG.tautulli_server_url);
     
         let data = client
-            .get(format!("{}get_activity", &SETTINGS.tautulli_server_url))
+            .get(format!("{}get_activity", &settings.tautulli_server_url))
     
             .header("User-Agent", "drp-rs tautulli status 0.1")
-            .header("Cookie", &SETTINGS.tautulli_server_cookie)
+            .header("Cookie", &settings.tautulli_server_cookie)
             .send();
     
         let d = data.unwrap().json::<TautulliResponse>();
@@ -41,7 +42,7 @@ impl MetadataProvider for TautulliParser {
         let user_session: Vec<&TautulliSession> = binding
             .sessions
             .iter()
-            .filter(|session| session.user == SETTINGS.discord_username)
+            .filter(|session| &session.user == &settings.discord_username)
             .collect();
         match user_session.len() {
             0 => return None,

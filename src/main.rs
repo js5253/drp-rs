@@ -7,7 +7,7 @@ use discord_rich_presence::{
     DiscordIpc, DiscordIpcClient,
 };
 use settings::AppSettings;
-use std::{error::Error, sync::{Arc, Mutex}, thread, time::Duration};
+use std::{error::Error, sync::{Arc, Mutex, RwLock}, thread, time::Duration};
 use fltk::{
     app::{self},
     button::Button,
@@ -36,42 +36,36 @@ fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider>> {
     }
 }
 
-lazy_static! {
-    pub static ref SETTINGS: AppSettings = AppSettings::new().expect("Config file is incorrect.");
-}
-
-
-fn ui(thread_arc: Arc<Mutex<AppStatus>>) {
-    println!("{:?}", thread_arc);
+fn ui(settings: Arc<RwLock<AppSettings>>) {
+    println!("{:?}", settings);
+    let settings_reader = settings.read().unwrap();
     let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
     let mut wind = Window::default().with_size(500, 200).center_screen();
-
-    let mut save_label = TextDisplay::default()
+    
+    let save_label = TextDisplay::default()
         .with_pos(150, 25)
         .with_label("App needs to quit after making changes.");
     let mut tautulli_token_textbox = Input::default()
         .with_label("Tautulli Cookie")
         .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&save_label, 2);
-    let mut tautulli_token_state = String::from(&SETTINGS.tautulli_server_cookie);
-    let _ = &tautulli_token_textbox.set_value(&tautulli_token_state);
+    let _ = &tautulli_token_textbox.set_value(&settings_reader.tautulli_server_cookie);
     let _ = &tautulli_token_textbox.set_callback(move |data| {
-        tautulli_token_state = data.value();
+        // handle this later
     });
 
     let mut jellyfin_token_textbox = Input::default()
         .with_label("Jellyfin Cookie")
         .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&tautulli_token_textbox, 2);
-    let mut jellyfin_token_state = String::new();
     &jellyfin_token_textbox.set_callback(move |data| {
-        jellyfin_token_state = data.value();
+        // handle this later
     });
-    let mut save_button = Button::default()
+    let save_button = Button::default()
         .with_label("Save Changes")
         .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&jellyfin_token_textbox, 10);
-    let mut service_status_label = TextDisplay::default()
+    let service_status_label = TextDisplay::default()
         .with_label("Service Status")
         .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&save_button, 3);
@@ -83,16 +77,11 @@ fn ui(thread_arc: Arc<Mutex<AppStatus>>) {
     app.run().unwrap();
 }
 
-fn service(app_status: Arc<Mutex<AppStatus>>) -> Result<(), Box<dyn Error + Send>> {
-    {
-        let mut data = app_status.lock().unwrap();
-        *data = AppStatus::RUNNING;
-
-        println!("{:?}", &data);
-    }
-    println!("{:?}", SETTINGS.metadata_sources);
+fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Send>> {
+    let settings = settings.read().expect("Error reading RwLock idk 😭");
+    println!("{:?}", *settings);
     let mut provider: Option<Box<dyn MetadataProvider>> = None;
-    if SETTINGS
+    if settings
         .metadata_sources
         .contains(&"native_now_playing".to_string())
     {
@@ -109,7 +98,7 @@ fn service(app_status: Arc<Mutex<AppStatus>>) -> Result<(), Box<dyn Error + Send
         let prev_playing = provider.expect("Could not find a provider...");
             println!("Discord Playing Thing");
             loop {
-                let playing_metadata = prev_playing.get_playing_metadata().expect("Could not find metadata");
+                let playing_metadata = prev_playing.get_playing_metadata(&settings).expect("Could not find metadata");
                 let _ = ipc_client
                     .set_activity(
                         Activity::new()
@@ -150,7 +139,7 @@ enum AppStatus {
 }
 
 fn main() -> Result<(), Box<dyn Error + Send>> {
-    let data = Arc::new(Mutex::new(AppStatus::STOPPED));
+    let data = Arc::new(RwLock::new(AppSettings::new().expect("Could not read settings file.")));
     let a1 = Arc::clone(&data);
     let a2 = Arc::clone(&data);
     thread::spawn(move || service(a2).unwrap()).join();

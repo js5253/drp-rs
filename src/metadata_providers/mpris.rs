@@ -1,16 +1,16 @@
-use crate::metadata_providers::{MetadataProvider, Metadata};
+use crate::{metadata_providers::MetadataProvider, settings::AppSettings};
 
 #[cfg(target_os = "linux")]
 use mpris::{self, PlayerFinder};
 
-use crate::metadata_providers::MediaType;
+
 #[derive(Default)]
 pub struct MprisParser {
 }
 
 #[cfg(not(target_os="linux"))] 
 impl MetadataProvider for MprisParser {
-    fn get_playing_metadata(&self) -> Option<super::Metadata> {
+    fn get_playing_metadata(&self, settings: &AppSettings) -> Option<super::Metadata> {
         None
     }
 }

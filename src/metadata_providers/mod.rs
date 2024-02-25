@@ -4,6 +4,8 @@ use std::time::Duration;
 #[cfg(target_os="windows")]
 use ::windows::Media::{MediaPlaybackType, Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus};
 
+use crate::settings::AppSettings;
+
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PlaybackState {
@@ -52,7 +54,7 @@ pub struct Metadata {
 }
 
 pub trait MetadataProvider {
-    fn get_playing_metadata(&self) -> Option<Metadata>;
+    fn get_playing_metadata(&self, settings: &AppSettings) -> Option<Metadata>;
 }
 #[macro_export]
 macro_rules! platform_implementation {
@@ -74,7 +76,6 @@ macro_rules! platform_implementation {
 }
 }
 
-pub mod mac;
 pub mod mpris;
 pub mod extension;
 pub mod tautulli;

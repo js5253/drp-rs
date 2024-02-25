@@ -1,6 +1,8 @@
 
 
-use futures::executor;
+
+
+use crate::settings::AppSettings;
 
 use super::{MetadataProvider};
 
@@ -14,7 +16,7 @@ enum PlaybackType {
 pub struct WindowsParser {}
 #[cfg(not(target_os="windows"))] 
     impl MetadataProvider for WindowsParser {
-        fn get_playing_metadata(&self) -> Option<super::Metadata> {
+        fn get_playing_metadata(&self, settings: &AppSettings) -> Option<super::Metadata> {
             None
         }
     }
