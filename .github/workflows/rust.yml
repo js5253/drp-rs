@@ -16,7 +16,7 @@ jobs:
 
     steps:
     - name: Install dbus libraries
-      run: sudo apt install -y libdbus1-1-dev pkg-config
+      run: sudo apt install -y libdbus-1-dev pkg-config
     - uses: actions/checkout@v3
     - name: Build
       run: cargo build --verbose
