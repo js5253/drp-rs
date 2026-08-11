@@ -76,7 +76,7 @@ macro_rules! platform_implementation {
 }
 }
 
-pub mod mpris;
+pub mod mpris_parser;
 pub mod extension;
 pub mod tautulli;
 pub mod windows;

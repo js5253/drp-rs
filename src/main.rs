@@ -16,7 +16,8 @@ use fltk::{
     text::TextDisplay,
     window::Window,
 };
-use metadata_providers::{mpris::MprisParser, windows::WindowsParser, MetadataProvider};
+
+use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
 
 use lazy_static::lazy_static;
 
@@ -28,7 +29,7 @@ const UI_DEFAULT_HEIGHT: i32 = 30;
 fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider>> {
     // in the meantime, use only the first metadata provider.
     if cfg!(linux) {
-        Some(Box::new(MprisParser::default()))
+        Some(Box::new(MprisParser::new()))
     } else if cfg!(windows) {
         Some(Box::new(WindowsParser::default()))
     } else {
@@ -90,7 +91,7 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Sen
 
     loop {
         let mut ipc_client: DiscordIpcClient =
-            DiscordIpcClient::new(DISCORD_ID).expect("Could not connect to Discord");
+            DiscordIpcClient::new(DISCORD_ID);
         ipc_client.connect().unwrap();
         let mut time_elapsed: u64 = 0;
 
@@ -102,6 +103,7 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Sen
                 let _ = ipc_client
                     .set_activity(
                         Activity::new()
+                        .activity_type(discord_rich_presence::activity::ActivityType::Watching)
                             .assets(
                                 Assets::new()
                                     .large_image("https://cdn.frankerfacez.com/emoticon/660211/4")
