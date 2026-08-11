@@ -2,23 +2,37 @@ name: Rust
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - name: Install dbus libraries
-      run: sudo apt install -y libdbus-1-dev pkg-config
-    - uses: actions/checkout@v3
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+      - name: Install FLTK dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+          libx11-dev \
+          libxext-dev \
+          libxinerama-dev \
+          libxcursor-dev \
+          libxrender-dev \
+          libxfixes-dev \
+          libxft-dev \
+          libfontconfig1-dev \
+          libpango1.0-dev \
+          libglib2.0-dev \
+          libcairo2-dev
+      - name: Install dbus dependency
+        run: sudo apt install -y libdbus-1-dev
+      - uses: actions/checkout@v3
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
