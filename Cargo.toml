@@ -19,6 +19,11 @@ tokio = { version = "1.53.1", features = ["macros"] }
 urlencoding = "2.1.3"
 fltk = { version = "1.5.23", features = ["fltk-bundled"] }
 toml = "1.1.4"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+dotenvy = "0.15.7"
+tracing = "0.1.44"
+tower = "0.5.3"
+tower-http = { version = "0.7.0", features = ["trace"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 mpris = "2.1.0"

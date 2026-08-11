@@ -1,11 +1,12 @@
 use std::time::Duration;
 
 // use windows::Media::{MediaPlaybackType, Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus};
-#[cfg(target_os="windows")]
-use ::windows::Media::{MediaPlaybackType, Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus};
+#[cfg(target_os = "windows")]
+use ::windows::Media::{
+    Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus, MediaPlaybackType,
+};
 
 use crate::settings::AppSettings;
-
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PlaybackState {
@@ -75,8 +76,6 @@ macro_rules! platform_implementation {
 }
 }
 
-pub mod mpris_parser;
 pub mod extension;
-pub mod tautulli;
+pub mod mpris_parser;
 pub mod windows;
-pub mod tidal;

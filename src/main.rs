@@ -16,6 +16,7 @@ use fltk::{
 use settings::AppSettings;
 use std::{
     error::Error,
+    process::Command,
     sync::{Arc, Mutex, RwLock},
     thread,
     time::Duration,
@@ -31,6 +32,14 @@ const DISCORD_ID: &str = "1162169068418248764";
 
 const UI_DEFAULT_WIDTH: i32 = 300;
 const UI_DEFAULT_HEIGHT: i32 = 30;
+
+fn restart_service() -> Result<(), anyhow::Error> {
+    let path = std::env::current_dir()?;
+    Command::new(path);
+    std::process::exit(0);
+    Ok(())
+}
+
 fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider>> {
     // in the meantime, use only the first metadata provider.
     if cfg!(linux) {
@@ -67,14 +76,18 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
     &jellyfin_token_textbox.set_callback(move |data| {
         // handle this later
     });
-    let save_button = Button::default()
+    let mut save_button = Button::default()
         .with_label("Save Changes")
         .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&jellyfin_token_textbox, 10);
-    let service_status_label = TextDisplay::default()
+    let mut service_status_label = TextDisplay::default()
         .with_label("Service Status")
         .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&save_button, 3);
+
+    save_button.set_callback(|_| {
+        restart_service().unwrap();
+    });
     wind.add(&tautulli_token_textbox);
     wind.add(&save_button);
     wind.add(&service_status_label);
@@ -162,7 +175,7 @@ fn main() -> Result<(), Box<dyn Error + Send>> {
     ));
     let a1 = Arc::clone(&data);
     let a2 = Arc::clone(&data);
-    thread::spawn(move || service(a2).unwrap()).join();
+    let _ = thread::spawn(move || service(a2).unwrap()).join();
     ui(a1);
     Ok(())
 }

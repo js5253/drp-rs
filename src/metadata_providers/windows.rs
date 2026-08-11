@@ -1,6 +1,6 @@
+use super::MetadataProvider;
 use crate::settings::AppSettings;
 use futures::executor;
-use super::MetadataProvider;
 
 enum PlaybackType {
     UNKNOWN,

@@ -19,11 +19,11 @@ impl AppSettings {
 
         s.try_deserialize()
     }
-    pub fn write(&self) -> Result<Self, ConfigError> {
+    pub fn write(&self) -> Result<(), ConfigError> {
         let _config_file = fs::write(
             "App.toml",
             toml::to_string(&self).expect("Couldn't write settings back to file..."),
         );
-        Ok(self.clone())
+        Ok(())
     }
 }
