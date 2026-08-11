@@ -28,7 +28,7 @@ impl MetadataProvider for MprisParser {
 impl MprisParser {
     pub fn new() -> Self {
         Self {
-            process_types: include_bytes!("../processes.toml").parse::<ProcessTypes>(),
+            process_types: toml::from_str(include_str!("../processes.toml")).unwrap_or(ProcessTypes {music: Vec::new(), video: Vec::new()})
         }
     }
 }

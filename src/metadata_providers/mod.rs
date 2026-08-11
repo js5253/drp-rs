@@ -17,9 +17,9 @@ pub enum PlaybackState {
 impl From<GlobalSystemMediaTransportControlsSessionPlaybackStatus> for PlaybackState {
     fn from(value: GlobalSystemMediaTransportControlsSessionPlaybackStatus) -> Self {
         match value {
-            GlobalSystemMediaTransportControlsSessionPlaybackStatus(4) => PlaybackState::PLAYING,
+            GlobalSystemMediaTransportControlsSessionPlaybackStatus(4) => Self::PLAYING,
             GlobalSystemMediaTransportControlsSessionPlaybackStatus(5) => Self::PAUSED,
-            _ => PlaybackState::UNKNOWN,
+            _ => Self::UNKNOWN,
         }
     }
 }
@@ -28,7 +28,6 @@ pub enum MediaType {
     AUDIO,
     VIDEO,
     MIXED,
-    UNKNOWN,
 }
 #[cfg(target_os = "windows")]
 impl From<MediaPlaybackType> for MediaType {
@@ -36,7 +35,7 @@ impl From<MediaPlaybackType> for MediaType {
         match value {
             MediaPlaybackType(1) => MediaType::VIDEO,
             MediaPlaybackType(2) => MediaType::AUDIO,
-            _ => MediaType::UNKNOWN,
+            _ => MediaType::MIXED,
         }
     }
 }

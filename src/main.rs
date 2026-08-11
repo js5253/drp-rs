@@ -1,13 +1,10 @@
-mod util;
 mod metadata_providers;
 mod settings;
-use util::pretty_time;
+mod util;
 use discord_rich_presence::{
     activity::{Activity, Assets},
     DiscordIpc, DiscordIpcClient,
 };
-use settings::AppSettings;
-use std::{error::Error, sync::{Arc, Mutex, RwLock}, thread, time::Duration};
 use fltk::{
     app::{self},
     button::Button,
@@ -16,6 +13,14 @@ use fltk::{
     text::TextDisplay,
     window::Window,
 };
+use settings::AppSettings;
+use std::{
+    error::Error,
+    sync::{Arc, Mutex, RwLock},
+    thread,
+    time::Duration,
+};
+use util::pretty_time;
 
 use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
 
@@ -42,7 +47,7 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
     let settings_reader = settings.read().unwrap();
     let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
     let mut wind = Window::default().with_size(500, 200).center_screen();
-    
+
     let save_label = TextDisplay::default()
         .with_pos(150, 25)
         .with_label("App needs to quit after making changes.");
@@ -79,58 +84,69 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
 }
 
 fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Send>> {
-    let settings = settings.read().expect("Error reading RwLock idk 😭");
+    let settings = settings.read().unwrap();
     println!("{:?}", *settings);
     let mut provider: Option<Box<dyn MetadataProvider>> = None;
     if settings
         .metadata_sources
         .contains(&"native_now_playing".to_string())
     {
-        provider = Some(get_os_specific_provider().expect("Could not find a default provider"));
+        provider = Some(
+            get_os_specific_provider()
+                .expect("Could not find a default provider for your platform"),
+        );
     }
-
+    let mut ipc_client: DiscordIpcClient = DiscordIpcClient::new(DISCORD_ID);
+    ipc_client.connect().unwrap();
     loop {
-        let mut ipc_client: DiscordIpcClient =
-            DiscordIpcClient::new(DISCORD_ID);
-        ipc_client.connect().unwrap();
         let mut time_elapsed: u64 = 0;
 
         println!("Something here...");
         let prev_playing = provider.expect("Could not find a provider...");
-            println!("Discord Playing Thing");
-            loop {
-                let playing_metadata = prev_playing.get_playing_metadata(&settings).expect("Could not find metadata");
-                let _ = ipc_client
-                    .set_activity(
-                        Activity::new()
-                        .activity_type(discord_rich_presence::activity::ActivityType::Watching)
-                            .assets(
-                                Assets::new()
-                                    .large_image("https://cdn.frankerfacez.com/emoticon/660211/4")
-                                    .small_image("https://cdn.frankerfacez.com/emoticon/660211/4"),
-                            )
-                            .details(&format!(
-                                "{} - {}",
-                                &playing_metadata.title,
-                                &playing_metadata.aux_title.unwrap_or_default()
-                            ))
-                            // .assets(Assets::new().large_image(&curr_playing.metadata_media.clone().unwrap()))
-                            .state(
-                                format!(
-                                    "{} played",
-                                    pretty_time(
-                                        playing_metadata
-                                            .progress
-                                            .unwrap_or(Duration::from_secs(time_elapsed))
-                                    )
-                                )
-                                .as_str(),
-                            ),
+        println!("Discord Playing Thing");
+        loop {
+            let playing_metadata = prev_playing
+                .get_playing_metadata(&settings)
+                .expect("Could not find metadata");
+            let activity = ipc_client.set_activity(
+                Activity::new()
+                    .activity_type(match playing_metadata.media_type {
+                        metadata_providers::MediaType::AUDIO => {
+                            discord_rich_presence::activity::ActivityType::Listening
+                        }
+                        metadata_providers::MediaType::VIDEO => {
+                            discord_rich_presence::activity::ActivityType::Watching
+                        }
+                        metadata_providers::MediaType::MIXED => {
+                            discord_rich_presence::activity::ActivityType::Playing
+                        }
+                    })
+                    .assets(
+                        Assets::new()
+                            .large_image("https://cdn.frankerfacez.com/emoticon/660211/4")
+                            .small_image("https://cdn.frankerfacez.com/emoticon/660211/4"),
                     )
-                    .unwrap();
-                time_elapsed += DELAY_TO_RECHECK;
-                thread::sleep(Duration::from_secs(DELAY_TO_RECHECK));
-            }
+                    .details(&format!(
+                        "{} - {}",
+                        &playing_metadata.title,
+                        &playing_metadata.aux_title.unwrap_or_default()
+                    ))
+                    .state(
+                        format!(
+                            "{} played",
+                            pretty_time(
+                                playing_metadata
+                                    .progress
+                                    .unwrap_or(Duration::from_secs(time_elapsed))
+                            )
+                        )
+                        .as_str(),
+                    ),
+            );
+            activity.unwrap();
+            time_elapsed += DELAY_TO_RECHECK;
+            thread::sleep(Duration::from_secs(DELAY_TO_RECHECK));
+        }
     }
 }
 #[derive(Debug)]
@@ -141,7 +157,9 @@ enum AppStatus {
 }
 
 fn main() -> Result<(), Box<dyn Error + Send>> {
-    let data = Arc::new(RwLock::new(AppSettings::new().expect("Could not read settings file.")));
+    let data = Arc::new(RwLock::new(
+        AppSettings::new().expect("Could not read settings file."),
+    ));
     let a1 = Arc::clone(&data);
     let a2 = Arc::clone(&data);
     thread::spawn(move || service(a2).unwrap()).join();
