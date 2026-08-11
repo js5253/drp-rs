@@ -17,7 +17,7 @@ use settings::AppSettings;
 use std::{
     error::Error,
     process::Command,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
     thread,
     time::Duration,
 };
@@ -25,7 +25,6 @@ use util::pretty_time;
 
 use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
 
-use lazy_static::lazy_static;
 
 const DELAY_TO_RECHECK: u64 = 3;
 const DISCORD_ID: &str = "1162169068418248764";
@@ -37,22 +36,22 @@ fn restart_service() -> Result<(), anyhow::Error> {
     let path = std::env::current_dir()?;
     Command::new(path);
     std::process::exit(0);
-    Ok(())
 }
 
 fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider>> {
     // in the meantime, use only the first metadata provider.
-    if cfg!(linux) {
+    if cfg!(target_os = "linux") {
         Some(Box::new(MprisParser::new()))
-    } else if cfg!(windows) {
+    } else if cfg!(target_os = "windows") {
         Some(Box::new(WindowsParser::default()))
     } else {
-        return None;
+        None
     }
 }
 
 fn ui(settings: Arc<RwLock<AppSettings>>) {
     println!("{:?}", settings);
+    #[allow(clippy::unwrap_used)]
     let settings_reader = settings.read().unwrap();
     let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
     let mut wind = Window::default().with_size(500, 200).center_screen();
@@ -65,7 +64,7 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
         .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&save_label, 2);
     let _ = &tautulli_token_textbox.set_value(&settings_reader.tautulli_server_cookie);
-    let _ = &tautulli_token_textbox.set_callback(move |data| {
+    let _ = &tautulli_token_textbox.set_callback(move |_| {
         // handle this later
     });
 
@@ -73,19 +72,20 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
         .with_label("Jellyfin Cookie")
         .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&tautulli_token_textbox, 2);
-    &jellyfin_token_textbox.set_callback(move |data| {
+    jellyfin_token_textbox.set_callback(move |_| {
         // handle this later
     });
     let mut save_button = Button::default()
         .with_label("Save Changes")
         .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&jellyfin_token_textbox, 10);
-    let mut service_status_label = TextDisplay::default()
+    let service_status_label = TextDisplay::default()
         .with_label("Service Status")
         .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&save_button, 3);
 
     save_button.set_callback(|_| {
+        #[allow(clippy::unwrap_used)]
         restart_service().unwrap();
     });
     wind.add(&tautulli_token_textbox);
@@ -93,10 +93,13 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
     wind.add(&service_status_label);
     wind.end();
     wind.show();
+
+    #[allow(clippy::unwrap_used)]
     app.run().unwrap();
 }
 
 fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Send>> {
+    #[allow(clippy::unwrap_used)]
     let settings = settings.read().unwrap();
     println!("{:?}", *settings);
     let mut provider: Option<Box<dyn MetadataProvider>> = None;
@@ -105,77 +108,79 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Sen
         .contains(&"native_now_playing".to_string())
     {
         provider = Some(
+            #[allow(clippy::expect_used)]
             get_os_specific_provider()
-                .expect("Could not find a default provider for your platform"),
+                .expect("Could not find a provider for your platform! Exiting."),
         );
     }
     let mut ipc_client: DiscordIpcClient = DiscordIpcClient::new(DISCORD_ID);
-    ipc_client.connect().unwrap();
-    loop {
-        let mut time_elapsed: u64 = 0;
+    while !ipc_client.connect().is_ok() {}
+    let mut time_elapsed: u64 = 0;
 
-        println!("Something here...");
-        let prev_playing = provider.expect("Could not find a provider...");
-        println!("Discord Playing Thing");
-        loop {
-            let playing_metadata = prev_playing
-                .get_playing_metadata(&settings)
-                .expect("Could not find metadata");
-            let activity = ipc_client.set_activity(
-                Activity::new()
-                    .activity_type(match playing_metadata.media_type {
-                        metadata_providers::MediaType::AUDIO => {
-                            discord_rich_presence::activity::ActivityType::Listening
-                        }
-                        metadata_providers::MediaType::VIDEO => {
-                            discord_rich_presence::activity::ActivityType::Watching
-                        }
-                        metadata_providers::MediaType::MIXED => {
-                            discord_rich_presence::activity::ActivityType::Playing
-                        }
-                    })
-                    .assets(
-                        Assets::new()
-                            .large_image("https://cdn.frankerfacez.com/emoticon/660211/4")
-                            .small_image("https://cdn.frankerfacez.com/emoticon/660211/4"),
-                    )
-                    .details(&format!(
-                        "{} - {}",
-                        &playing_metadata.title,
-                        &playing_metadata.aux_title.unwrap_or_default()
-                    ))
-                    .state(
-                        format!(
-                            "{} played",
-                            pretty_time(
-                                playing_metadata
-                                    .progress
-                                    .unwrap_or(Duration::from_secs(time_elapsed))
-                            )
+    println!("Something here...");
+    #[allow(clippy::expect_used)]
+    let prev_playing = provider.expect("Could not find a provider...");
+    println!("Discord Playing Thing");
+    loop {
+        #[allow(clippy::expect_used)]
+        let playing_metadata = prev_playing
+            .get_playing_metadata(&settings)
+            .expect("Could not find metadata");
+        let _ = ipc_client.set_activity(
+            Activity::new()
+                .activity_type(match playing_metadata.media_type {
+                    metadata_providers::MediaType::AUDIO => {
+                        discord_rich_presence::activity::ActivityType::Listening
+                    }
+                    metadata_providers::MediaType::VIDEO => {
+                        discord_rich_presence::activity::ActivityType::Watching
+                    }
+                    metadata_providers::MediaType::MIXED => {
+                        discord_rich_presence::activity::ActivityType::Playing
+                    }
+                })
+                .assets(
+                    Assets::new()
+                        .large_image("https://cdn.frankerfacez.com/emoticon/660211/4")
+                        .small_image("https://cdn.frankerfacez.com/emoticon/660211/4"),
+                )
+                .details(format!(
+                    "{} - {}",
+                    playing_metadata.title,
+                    playing_metadata.aux_title.unwrap_or_default()
+                ))
+                .state(
+                    format!(
+                        "{} played",
+                        pretty_time(
+                            playing_metadata
+                                .progress
+                                .unwrap_or(Duration::from_secs(time_elapsed))
                         )
-                        .as_str(),
-                    ),
-            );
-            activity.unwrap();
-            time_elapsed += DELAY_TO_RECHECK;
-            thread::sleep(Duration::from_secs(DELAY_TO_RECHECK));
-        }
+                    )
+                    .as_str(),
+                ),
+        );
+        time_elapsed += DELAY_TO_RECHECK;
+        thread::sleep(Duration::from_secs(DELAY_TO_RECHECK));
     }
 }
-#[derive(Debug)]
-enum AppStatus {
-    STOPPED,
-    RUNNING,
-    ERROR,
-}
+// #[derive(Debug)]
+// enum AppStatus {
+//     STOPPED,
+//     RUNNING,
+//     ERROR,
+// }
 
 fn main() -> Result<(), Box<dyn Error + Send>> {
     let data = Arc::new(RwLock::new(
+        #[allow(clippy::expect_used)]
         AppSettings::new().expect("Could not read settings file."),
     ));
     let a1 = Arc::clone(&data);
     let a2 = Arc::clone(&data);
-    let _ = thread::spawn(move || service(a2).unwrap()).join();
+            #[allow(clippy::expect_used)]
+    let _ = thread::spawn(move || service(a2).expect("Failed to start DRP-RS service. Exiting.")).join();
     ui(a1);
     Ok(())
 }
