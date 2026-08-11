@@ -1,5 +1,5 @@
 use crate::settings::AppSettings;
-
+use futures::executor;
 use super::MetadataProvider;
 
 enum PlaybackType {
@@ -61,7 +61,7 @@ async fn get_playback_metadata() -> Option<super::Metadata> {
 }
 #[cfg(target_os = "windows")]
 impl MetadataProvider for WindowsParser {
-    fn get_playing_metadata(&self) -> Option<super::Metadata> {
+    fn get_playing_metadata(&self, settings: &AppSettings) -> Option<super::Metadata> {
         executor::block_on(get_playback_metadata())
     }
 }

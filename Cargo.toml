@@ -26,8 +26,7 @@ mpris = "2.1.0"
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62.2", features = ["Media_Control", "Foundation", "Foundation_Collections", "Storage_Streams", "Win32_Foundation"] }
 
-
-cacao = "0.3.2"
+# cacao = "0.3.2"
 
 [profile.release]
 strip = "symbols"

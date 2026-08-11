@@ -9,7 +9,7 @@ Binaries aren't available at the moment, but they will eventually be.
 |   Mac     | eventually?|
 
 ## Planned features
-Currently, support is planned to be added for an extension (which will change a lot of how drp will work), and Jellyfin session support is also planned. If TIDAL comes up with a REST API, it will be incorporated, and a GUI might be added.
+Currently, support is planned to be added for an extension (which will change a lot of how drp will work), and Jellyfin session support is also planned.
 
 ## Config
 Copy the `App.example.toml` file into `App.toml`. Filling all the config options is required, even if you're only using the local media reporting.
