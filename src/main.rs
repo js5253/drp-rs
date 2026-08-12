@@ -7,7 +7,7 @@ use discord_rich_presence::{
 };
 use fltk::{
     app::{self},
-    button::Button,
+    button::{Button, CheckButton},
     input::Input,
     prelude::*,
     text::TextDisplay,
@@ -17,14 +17,16 @@ use settings::AppSettings;
 use std::{
     error::Error,
     process::Command,
-    sync::{Arc, RwLock},
+    sync::{mpsc, Arc, RwLock},
     thread,
     time::Duration,
 };
+use tokio::task;
 use util::pretty_time;
 
 use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
 
+use crate::metadata_providers::extension::run_server;
 
 const DELAY_TO_RECHECK: u64 = 3;
 const DISCORD_ID: &str = "1162169068418248764";
@@ -59,19 +61,17 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
     let save_label = TextDisplay::default()
         .with_pos(150, 25)
         .with_label("App needs to quit after making changes.");
-    let mut tautulli_token_textbox = Input::default()
-        .with_label("Tautulli Cookie")
-        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
+
+    let mut extension_enabled_textbox = CheckButton::default()
+        .with_label("Enable Extension Host")
         .below_of(&save_label, 2);
-    let _ = &tautulli_token_textbox.set_value(&settings_reader.tautulli_server_cookie);
-    let _ = &tautulli_token_textbox.set_callback(move |_| {
+    let _ = extension_enabled_textbox.set_callback(|_| {
         // handle this later
     });
-
     let mut jellyfin_token_textbox = Input::default()
         .with_label("Jellyfin Cookie")
         .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
-        .below_of(&tautulli_token_textbox, 2);
+        .below_of(&extension_enabled_textbox, 2);
     jellyfin_token_textbox.set_callback(move |_| {
         // handle this later
     });
@@ -88,8 +88,10 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
         #[allow(clippy::unwrap_used)]
         restart_service().unwrap();
     });
-    wind.add(&tautulli_token_textbox);
     wind.add(&save_button);
+    wind.add(&save_label);
+    wind.add(&extension_enabled_textbox);
+    wind.add(&jellyfin_token_textbox);
     wind.add(&service_status_label);
     wind.end();
     wind.show();
@@ -114,6 +116,7 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Sen
         );
     }
     let mut ipc_client: DiscordIpcClient = DiscordIpcClient::new(DISCORD_ID);
+
     while !ipc_client.connect().is_ok() {}
     let mut time_elapsed: u64 = 0;
 
@@ -171,16 +174,21 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Sen
 //     RUNNING,
 //     ERROR,
 // }
-
-fn main() -> Result<(), Box<dyn Error + Send>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error + Send>> {
+    // let (tx, rx) = mpsc::channel();
     let data = Arc::new(RwLock::new(
         #[allow(clippy::expect_used)]
         AppSettings::new().expect("Could not read settings file."),
     ));
     let a1 = Arc::clone(&data);
+    let a3 = Arc::clone(&data);
     let a2 = Arc::clone(&data);
-            #[allow(clippy::expect_used)]
-    let _ = thread::spawn(move || service(a2).expect("Failed to start DRP-RS service. Exiting.")).join();
-    ui(a1);
+    #[allow(clippy::expect_used)]
+    task::spawn_blocking(|| service(a2).expect("Failed to start DRP-RS service. Exiting."));
+    if a3.read().unwrap().extension_host_enabled {
+        tokio::spawn(async { run_server().await });
+    }
+    task::spawn_blocking(|| ui(a1));
     Ok(())
 }

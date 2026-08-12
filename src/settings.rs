@@ -9,6 +9,7 @@ pub struct AppSettings {
     pub tautulli_server_url: String,
     pub tautulli_server_cookie: String,
     pub metadata_sources: Vec<String>,
+    pub extension_host_enabled: bool
 }
 impl AppSettings {
     pub fn new() -> Result<Self, ConfigError> {

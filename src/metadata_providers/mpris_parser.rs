@@ -1,7 +1,10 @@
+#[cfg(target_os = "linux")]
+use std::ops::Deref;
+
 use crate::metadata_providers::MediaType;
 
 #[cfg(target_os = "linux")]
-use crate::metadata_providers::Metadata;
+use crate::metadata_providers::{Metadata, PlaybackState};
 use crate::{metadata_providers::MetadataProvider, settings::AppSettings};
 
 #[cfg(target_os = "linux")]
@@ -44,8 +47,8 @@ impl MetadataProvider for MprisParser {
         let player = PlayerFinder::new().ok()?;
         let player = player.find_active().ok()?;
 
-        let _status = player.get_playback_status().ok()?;
-        let progress = player.get_position().ok()?;
+        let status = player.get_playback_status().ok();
+        let progress = player.get_position().ok();
         let binding = player.get_metadata().ok()?;
         let metadata = binding.as_hashmap();
         let media_type: MediaType = {
@@ -65,21 +68,26 @@ impl MetadataProvider for MprisParser {
                 MediaType::MIXED
             }
         };
-        // println!("{:?}", metadata);
+        let title = metadata.get("xesam:title")?.as_string()?;
+        let artist = metadata.get("xesam:artist").and_then(|artist| artist.as_str_array()).map(|artist| artist.join(", ")); // could be None, in which case it should still go through the rest of the code and just show the title
+        let aux_title = metadata.get("xesam:album").clone();
+        let aux_title = aux_title?.clone().clone().into_string();
+        // this is way too much of a mess; i'll check it out later
+        let photo_url = &metadata.get("mpris:artUrl")?.clone().clone().into_string();
 
+        let formatted_title = match artist {
+            None => title,
+            Some(artist) => &format!("{} - {}", title, artist),
+        };
         Some(Metadata {
-            title: format!(
-                "{} - {}",
-                metadata.get("xesam:title")?.as_str()?,
-                metadata.get("xesam:artist")?.as_str_array()?.join(", ")
-            ),
-            aux_title: Some(metadata.get("xesam:album")?.as_str()?.to_string()),
-            progress: Some(progress),
-            state: None,
+            title: formatted_title.to_owned(),
+            aux_title,
+            progress,
+            state: status.map(|status| {status.into()}),
             provider_name: String::from("MPRIS provider"),
             subprovider_name: Some(player.identity().to_string()),
             media_type,
-            metadata_media: Some(metadata.get("mpris:artUrl")?.as_str()?.to_string()),
+            metadata_media: photo_url.to_owned()
         })
     }
 }

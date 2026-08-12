@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+#[cfg(target_os = "linux")]
+use mpris::PlaybackStatus;
 // use windows::Media::{MediaPlaybackType, Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus};
 #[cfg(target_os = "windows")]
 use ::windows::Media::{
@@ -12,7 +14,9 @@ use crate::settings::AppSettings;
 pub enum PlaybackState {
     PLAYING,
     PAUSED,
+    STOPPED,
     UNKNOWN,
+
 }
 #[cfg(target_os = "windows")]
 impl From<GlobalSystemMediaTransportControlsSessionPlaybackStatus> for PlaybackState {
@@ -24,6 +28,19 @@ impl From<GlobalSystemMediaTransportControlsSessionPlaybackStatus> for PlaybackS
         }
     }
 }
+
+#[cfg(target_os = "linux")]
+impl From<PlaybackStatus> for PlaybackState {
+    fn from(value: PlaybackStatus) -> Self {
+        match value {
+            PlaybackStatus::Playing => PlaybackState::PLAYING,
+            PlaybackStatus::Paused => PlaybackState::PAUSED,
+            PlaybackStatus::Stopped => PlaybackState::STOPPED,
+        }
+    }
+}
+
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum MediaType {
     AUDIO,
@@ -55,25 +72,6 @@ pub struct Metadata {
 
 pub trait MetadataProvider {
     fn get_playing_metadata(&self, settings: &AppSettings) -> Option<Metadata>;
-}
-#[macro_export]
-macro_rules! platform_implementation {
-    ($platform:literal $($code:tt)*) => {
-        {
-        #[cfg(target_os=$platform)] {
-            impl MetadataProvider for MprisParser {
-            fn get_playing_metadata(&self) -> Option<super::Metadata> {
-                $($code)*
-            }
-        }
-        #[cfg(not(target_os=$platform))] {
-            fn get_playing_metadata(&self) -> Option<super::Metadata> {
-                None
-            }
-        }
-        }
-    };
-}
 }
 
 pub mod extension;
