@@ -17,7 +17,10 @@ jobs:
       - name: Checkout Git Repo
         uses: actions/checkout@v3
       - name: Output Git Release
-        run: echo ${{ github.sha }} > Release.txt
+        run: | 
+          echo ${{ github.sha }} > Release.txt \
+          && echo "RELEASE_VERSION=$(git rev-parse --short HEAD)" | tee -a $GITHUB_ENV
+
       - name: Install FLTK dependency
         run: |
           sudo apt-get install -y \
@@ -41,5 +44,5 @@ jobs:
       - name: Upload release
         uses: softprops/action-gh-release@v3
         with: 
-          tag_name: ${{github.sha}}
+          tag_name: ${{env.RELEASE_VERSION}}
           files: Release.txt
