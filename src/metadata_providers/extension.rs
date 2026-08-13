@@ -19,7 +19,6 @@ pub async fn register_activity(Json(body): Json<RegisterActivityBody>) {
 
 pub async fn run_server() {
     println!("Running drp.rs server...");
-    dotenv().expect("Missing .env - copy .env.example and fill out.");
     let addr_to_bind = env::var("ADDR_TO_BIND").unwrap_or("0.0.0.0:3000".to_string());
 
     tracing_subscriber::fmt()

@@ -6,7 +6,7 @@ use discord_rich_presence::{
     activity::{Activity, Assets},
     DiscordIpc, DiscordIpcClient,
 };
-use dotenvy_macro::dotenv;
+use dotenvy::dotenv;
 use fltk::{
     app::{self},
     button::{Button, CheckButton},
@@ -184,7 +184,8 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
 // }
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send>> {
-    // let (tx, rx) = mpsc::channel();
+    dotenvy::dotenv_override().ok();
+    println!("{}", DISCORD_ID);
     let data = Arc::new(RwLock::new(
         #[allow(clippy::expect_used)]
         AppSettings::new().expect("Could not read settings file."),
