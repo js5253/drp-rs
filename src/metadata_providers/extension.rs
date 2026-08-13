@@ -3,13 +3,15 @@ use std::env;
 use axum::{extract::Json, routing::post, Extension, Router};
 use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
+use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct RegisterActivityBody {
+    subprovider_name: String,
     title: String,
-    aux_title: String
+    artist: String,
 
 }
 pub async fn register_activity(Json(body): Json<RegisterActivityBody>) {
@@ -17,7 +19,7 @@ pub async fn register_activity(Json(body): Json<RegisterActivityBody>) {
 
 }
 
-pub async fn run_server() {
+pub async fn run_server(token: CancellationToken) {
     println!("Running drp.rs server...");
     let addr_to_bind = env::var("ADDR_TO_BIND").unwrap_or("0.0.0.0:3000".to_string());
 
@@ -40,10 +42,4 @@ pub async fn run_server() {
         .route("/register_activity", post(register_activity))
         .layer(TraceLayer::new_for_http());
     axum::serve(listener, app).await.unwrap();
-}
-#[derive(Serialize, Deserialize, Debug)]
-struct AppRequest {
-    provider_name: String,
-    title: String,
-    artist: String,
 }

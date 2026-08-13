@@ -68,8 +68,8 @@ impl MetadataProvider for MprisParser {
                 MediaType::MIXED
             }
         };
-        let title: Option<&String> = metadata.get("xesam:title").and_then(|title| title.as_string());
-        let artist: Option<String> = metadata.get("xesam:artist").and_then(|artist| artist.as_str_array()).map(|artist| artist.join(", "));
+        let title = metadata.get("xesam:title").and_then(|title| title.as_string());
+        let artist = metadata.get("xesam:artist").and_then(|artist| artist.as_str_array()).map(|artist| artist.join(", "));
         let aux_title = metadata.get("xesam:album").and_then(|aux_title| aux_title.as_string()).filter(|pred| !pred.is_empty());
         let photo_url = metadata.get("mpris:artUrl").and_then(|url| url.as_string());
         let title = title?;

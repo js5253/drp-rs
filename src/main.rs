@@ -23,16 +23,17 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tokio::task;
+use tokio::{task, signal};
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuItemKind::MenuItem},
     Icon, TrayIconBuilder, TrayIconEvent,
 };
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use util::pretty_time;
 
 use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
 
-use crate::metadata_providers::extension::run_server;
+use crate::{metadata_providers::extension::run_server, util::get_action_string};
 
 const DELAY_TO_RECHECK: u64 = 3;
 const UI_DEFAULT_WIDTH: i32 = 300;
@@ -58,7 +59,7 @@ fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider>> {
     }
 }
 
-fn ui(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
+fn ui(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyhow::Result<()> {
     let _settings_reader = settings
         .read()
         .map_err(|_err| anyhow!("Failed to acquire a lock"));
@@ -108,7 +109,7 @@ fn ui(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
+fn service(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyhow::Result<()> {
     let settings: std::sync::RwLockReadGuard<'_, AppSettings> = settings
         .read()
         .map_err(|_error| anyhow!("Failed to acquire a lock on app settings"))?;
@@ -131,6 +132,10 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
     let mut time_elapsed: u64 = 0;
 
     loop {
+        if token.is_cancelled() {
+            ipc_client.close();
+            return Ok(());
+        }
         #[allow(clippy::expect_used)]
         let playing_metadata = provider
             .as_ref()
@@ -155,9 +160,9 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
                     }
                 })
                 .name(
-                    playing_metadata
-                        .subprovider_name
-                        .unwrap_or(String::from("Media")),
+                    get_action_string(&playing_metadata.media_type, playing_metadata.title.clone())
+                    // playing_metadata
+                        // .subprovider_name
                 )
                 .assets(
                     Assets::new()
@@ -201,10 +206,17 @@ async fn main() {
 }
 async fn app() -> anyhow::Result<()>{
     let _ = dotenvy::dotenv()?;
+    let tracker = TaskTracker::new();
+    let token = CancellationToken::new();
     let data = Arc::new(RwLock::new(AppSettings::new()?));
+
     let ui_lock = Arc::clone(&data);
     let extension_lock = Arc::clone(&data);
     let service_lock = Arc::clone(&data);
+
+    let service_token = token.clone();
+    let extension_token = token.clone();
+    let ui_token = token.clone();
 
     let icon_image = image::open("assets/play.png")?;
     let menu = Menu::new();
@@ -219,25 +231,33 @@ async fn app() -> anyhow::Result<()>{
         .with_icon(icon)
         .with_menu(Box::new(menu))
         .build()?;
-    task::spawn_blocking(|| ui(ui_lock));
-    task::spawn_blocking(|| service(service_lock));
+    tracker.spawn_blocking(|| ui(ui_lock, ui_token));
+    tracker.spawn_blocking(|| service(service_lock, service_token));
 
     if extension_lock
         .read()
         .map_err(|_| anyhow!("Could not read settings"))?
         .extension_host_enabled
     {
-        tokio::spawn(async { run_server().await });
+        tracker.spawn(async { run_server(extension_token).await });
     }
-
+    tracker.close();
+    tracker.wait().await;
+    match signal::ctrl_c().await {
+        Ok(()) => {
+            token.cancel();
+        },
+        Err(err) => {},
+    }
+    Ok(())
     // handle tray events
-    loop {
-        if let Ok(event) = TrayIconEvent::receiver().try_recv() {
-            println!("tray event: {:?}", event);
-        }
+    // loop {
+    //     if let Ok(event) = TrayIconEvent::receiver().try_recv() {
+    //         println!("tray event: {:?}", event);
+    //     }
 
-        if let Ok(event) = MenuEvent::receiver().try_recv() {
-            println!("menu event: {:?}", event);
-        }
-    }
+    //     if let Ok(event) = MenuEvent::receiver().try_recv() {
+    //         println!("menu event: {:?}", event);
+    //     }
+    // }
 }
