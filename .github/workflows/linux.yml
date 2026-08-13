@@ -35,7 +35,8 @@ jobs:
           libpango1.0-dev \
           libglib2.0-dev \
           libcairo2-dev \
-          libgdk-pixbuf2.0-dev
+          libgdk-pixbuf2.0-dev \
+          libgtk-3-dev
       - name: Install dbus dependency
         run: sudo apt install -y libdbus-1-dev
       - name: Build (Linux)
