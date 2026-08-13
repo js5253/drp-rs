@@ -154,6 +154,7 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Sen
                 .details(format!(
                     "{} - {}",
                     playing_metadata.title,
+                    playing_metadata.aux_title.unwrap_or_default()
                 ))
                 .state(
                     format!(
