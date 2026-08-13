@@ -21,7 +21,7 @@ jobs:
           echo ${{ github.sha }} > Release.txt \
           && echo "RELEASE_VERSION=$(git rev-parse --short HEAD)" | tee -a $GITHUB_ENV
 
-      - name: Install FLTK dependency
+      - name: Install desktop (FLTK+tray_icon) dependency
         run: |
           sudo apt-get install -y \
           libx11-dev \
@@ -34,7 +34,8 @@ jobs:
           libfontconfig1-dev \
           libpango1.0-dev \
           libglib2.0-dev \
-          libcairo2-dev
+          libcairo2-dev \
+          libgdk-pixbuf2.0-dev
       - name: Install dbus dependency
         run: sudo apt install -y libdbus-1-dev
       - name: Build (Linux)
