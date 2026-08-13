@@ -58,9 +58,10 @@ fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider>> {
     }
 }
 
-fn ui(settings: Arc<RwLock<AppSettings>>) {
-    #[allow(clippy::unwrap_used)]
-    let settings_reader = settings.read().unwrap();
+fn ui(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
+    let _settings_reader = settings
+        .read()
+        .map_err(|_err| anyhow!("Failed to acquire a lock"));
     let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
     let mut wind = Window::default().with_size(500, 200).center_screen();
 
@@ -72,7 +73,7 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
         .with_label("Enable Extension Host")
         .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&save_label, 2);
-    let _ = extension_enabled_textbox.set_callback(|_| {
+    extension_enabled_textbox.set_callback(|_| {
         // handle this later
     });
     let mut jellyfin_token_textbox = Input::default()
@@ -92,8 +93,7 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
         .below_of(&save_button, 3);
 
     save_button.set_callback(|_| {
-        #[allow(clippy::unwrap_used)]
-        restart_service().unwrap();
+        let _ = restart_service();
     });
     wind.add(&save_button);
     wind.add(&save_label);
@@ -103,23 +103,21 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
     wind.end();
     wind.show();
 
-    #[allow(clippy::unwrap_used)]
-    app.run().unwrap();
+    let _ = app.run();
+
+    Ok(())
 }
 
 fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
-    #[allow(clippy::unwrap_used)]
-    let settings = settings.read().unwrap();
+    let settings: std::sync::RwLockReadGuard<'_, AppSettings> = settings
+        .read()
+        .map_err(|_error| anyhow!("Failed to acquire a lock on app settings"))?;
     let mut provider: Option<Box<dyn MetadataProvider>> = None;
     if settings
         .metadata_sources
         .contains(&"native_now_playing".to_string())
     {
-        provider = Some(
-            #[allow(clippy::expect_used)]
-            get_os_specific_provider()
-                .expect("Could not find a provider for your platform! Exiting."),
-        );
+        provider = get_os_specific_provider();
     }
     let timer = Instant::now();
     let mut ipc_client: DiscordIpcClient = DiscordIpcClient::new(DISCORD_ID);
@@ -132,17 +130,18 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
     println!("IPC Client Found!");
     let mut time_elapsed: u64 = 0;
 
-    #[allow(clippy::expect_used)]
-    let prev_playing = provider.expect("Could not find a provider...");
     loop {
         #[allow(clippy::expect_used)]
-        let playing_metadata = prev_playing.get_playing_metadata(&settings);
+        let playing_metadata = provider
+            .as_ref()
+            .expect("No provider was found for playing metadata")
+            .get_playing_metadata(&settings);
         let Some(playing_metadata) = playing_metadata else {
             continue;
         };
         println!("{:?}", playing_metadata);
 
-        let activity = ipc_client.set_activity(
+        let _activity = ipc_client.set_activity(
             Activity::new()
                 .activity_type(match playing_metadata.media_type {
                     metadata_providers::MediaType::AUDIO => {
@@ -190,48 +189,47 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
         thread::sleep(Duration::from_secs(DELAY_TO_RECHECK));
     }
 }
-// #[derive(Debug)]
-// enum AppStatus {
-//     STOPPED,
-//     RUNNING,
-//     ERROR,
-// }
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error + Send>> {
-    dotenvy::dotenv();
-    let data = Arc::new(RwLock::new(
-        #[allow(clippy::expect_used)]
-        AppSettings::new().expect("Could not read settings file."),
-    ));
+async fn main() {
+    let app = app().await;
+
+    match app {
+        Ok(()) => {},
+        Err(err) => println!("Failed to run drp.rs. Error: {:?}", err)
+    };
+}
+async fn app() -> anyhow::Result<()>{
+    let _ = dotenvy::dotenv()?;
+    let data = Arc::new(RwLock::new(AppSettings::new()?));
     let ui_lock = Arc::clone(&data);
     let extension_lock = Arc::clone(&data);
     let service_lock = Arc::clone(&data);
 
-    let icon_image = image::open("assets/play.png").unwrap();
+    let icon_image = image::open("assets/play.png")?;
     let menu = Menu::new();
-    menu.append_items(&[&tray_icon::menu::MenuItem::new("Menu item #3", true, None)]);
+    let _ = menu.append_items(&[&tray_icon::menu::MenuItem::new("Menu item #3", true, None)]);
     let icon = Icon::from_rgba(
         icon_image.as_bytes().to_vec(),
         icon_image.width(),
         icon_image.height(),
-    )
-    .expect("Unable to open icon");
+    )?;
     let tray_icon = TrayIconBuilder::new()
         .with_tooltip("system-tray - tray icon library!")
         .with_icon(icon)
         .with_menu(Box::new(menu))
-        .build()
-        .unwrap();
+        .build()?;
     task::spawn_blocking(|| ui(ui_lock));
+    task::spawn_blocking(|| service(service_lock));
 
-    #[allow(clippy::expect_used)]
-    task::spawn_blocking(|| {
-        service(service_lock).expect("Failed to start DRP-RS service. Exiting.")
-    });
-
-    if extension_lock.read().unwrap().extension_host_enabled {
+    if extension_lock
+        .read()
+        .map_err(|_| anyhow!("Could not read settings"))?
+        .extension_host_enabled
+    {
         tokio::spawn(async { run_server().await });
     }
+
     // handle tray events
     loop {
         if let Ok(event) = TrayIconEvent::receiver().try_recv() {
