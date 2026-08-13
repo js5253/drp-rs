@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Output Git Release
+        run: echo ${{ github.sha }} > Release.txt
       - name: Install FLTK dependency
         run: |
           sudo apt-get install -y \
@@ -35,3 +37,7 @@ jobs:
         run: cargo build --target=x86_64-unknown-linux-gnu --verbose
       - name: Run tests
         run: cargo test --verbose
+      - name: Upload release
+        uses: softprops/action-gh-release@v3
+        with: 
+          files: Release.txt
