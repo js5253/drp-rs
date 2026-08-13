@@ -24,6 +24,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::task;
+use tray_icon::{Icon, TrayIconBuilder, TrayIconEvent, menu::{Menu, MenuEvent, MenuItemKind::MenuItem}};
 use util::pretty_time;
 
 use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
@@ -202,11 +203,37 @@ async fn main() -> Result<(), Box<dyn Error + Send>> {
     let a1 = Arc::clone(&data);
     let a3 = Arc::clone(&data);
     let a2 = Arc::clone(&data);
+    let icon_image = image::open("assets/play.png").unwrap();
+    let menu = Menu::new();
+    menu.append_items(&[
+        &tray_icon::menu::MenuItem::new("Menu item #3", true, None),
+    ]);
+    let icon = Icon::from_rgba(
+        icon_image.as_bytes().to_vec(),
+        icon_image.width(),
+        icon_image.height(),
+    )
+    .expect("Unable to open icon");
+    let tray_icon = TrayIconBuilder::new()
+        .with_tooltip("system-tray - tray icon library!")
+        .with_icon(icon)
+        .with_menu(Box::new(menu))
+        .build()
+        .unwrap();
     #[allow(clippy::expect_used)]
     task::spawn_blocking(|| service(a2).expect("Failed to start DRP-RS service. Exiting."));
     if a3.read().unwrap().extension_host_enabled {
         tokio::spawn(async { run_server().await });
     }
     task::spawn_blocking(|| ui(a1));
-    Ok(())
+
+    loop {
+        if let Ok(event) = TrayIconEvent::receiver().try_recv() {
+            println!("tray event: {:?}", event);
+        }
+
+        if let Ok(event) = MenuEvent::receiver().try_recv() {
+            println!("menu event: {:?}", event);
+        }
+    }
 }
