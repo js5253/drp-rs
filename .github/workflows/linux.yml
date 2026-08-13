@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: ["main"]
 env:
-  $DISCORD_ID: ${{vars.DISCORD_ID}}
+  DISCORD_ID: ${{vars.DISCORD_ID}}
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout Git Repo
+        uses: actions/checkout@v3
       - name: Output Git Release
         run: echo ${{ github.sha }} > Release.txt
       - name: Install FLTK dependency
@@ -32,7 +34,6 @@ jobs:
           libcairo2-dev
       - name: Install dbus dependency
         run: sudo apt install -y libdbus-1-dev
-      - uses: actions/checkout@v3
       - name: Build (Linux)
         run: cargo build --target=x86_64-unknown-linux-gnu --verbose
       - name: Run tests
