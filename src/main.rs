@@ -24,7 +24,10 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::task;
-use tray_icon::{Icon, TrayIconBuilder, TrayIconEvent, menu::{Menu, MenuEvent, MenuItemKind::MenuItem}};
+use tray_icon::{
+    menu::{Menu, MenuEvent, MenuItemKind::MenuItem},
+    Icon, TrayIconBuilder, TrayIconEvent,
+};
 use util::pretty_time;
 
 use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
@@ -200,14 +203,13 @@ async fn main() -> Result<(), Box<dyn Error + Send>> {
         #[allow(clippy::expect_used)]
         AppSettings::new().expect("Could not read settings file."),
     ));
-    let a1 = Arc::clone(&data);
-    let a3 = Arc::clone(&data);
-    let a2 = Arc::clone(&data);
+    let ui_lock = Arc::clone(&data);
+    let extension_lock = Arc::clone(&data);
+    let service_lock = Arc::clone(&data);
+
     let icon_image = image::open("assets/play.png").unwrap();
     let menu = Menu::new();
-    menu.append_items(&[
-        &tray_icon::menu::MenuItem::new("Menu item #3", true, None),
-    ]);
+    menu.append_items(&[&tray_icon::menu::MenuItem::new("Menu item #3", true, None)]);
     let icon = Icon::from_rgba(
         icon_image.as_bytes().to_vec(),
         icon_image.width(),
@@ -220,13 +222,17 @@ async fn main() -> Result<(), Box<dyn Error + Send>> {
         .with_menu(Box::new(menu))
         .build()
         .unwrap();
+    task::spawn_blocking(|| ui(ui_lock));
+
     #[allow(clippy::expect_used)]
-    task::spawn_blocking(|| service(a2).expect("Failed to start DRP-RS service. Exiting."));
-    if a3.read().unwrap().extension_host_enabled {
+    task::spawn_blocking(|| {
+        service(service_lock).expect("Failed to start DRP-RS service. Exiting.")
+    });
+
+    if extension_lock.read().unwrap().extension_host_enabled {
         tokio::spawn(async { run_server().await });
     }
-    task::spawn_blocking(|| ui(a1));
-
+    // handle tray events
     loop {
         if let Ok(event) = TrayIconEvent::receiver().try_recv() {
             println!("tray event: {:?}", event);

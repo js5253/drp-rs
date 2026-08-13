@@ -62,6 +62,6 @@ async fn get_playback_metadata(&self, settings: &AppSettings) -> Option<super::M
 #[cfg(target_os = "windows")]
 impl MetadataProvider for WindowsParser {
     fn get_playing_metadata(&self, settings: &AppSettings) -> Option<super::Metadata> {
-        executor::block_on(get_playback_metadata())
+        executor::block_on(get_playback_metadata(&self, &settings))
     }
 }
