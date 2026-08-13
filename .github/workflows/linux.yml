@@ -41,4 +41,5 @@ jobs:
       - name: Upload release
         uses: softprops/action-gh-release@v3
         with: 
+          tag_name: ${{github.sha}}
           files: Release.txt
