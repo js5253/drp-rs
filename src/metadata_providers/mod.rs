@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{fmt, time::Duration};
 
 #[cfg(target_os = "linux")]
 use mpris::PlaybackStatus;
@@ -16,7 +16,16 @@ pub enum PlaybackState {
     PAUSED,
     STOPPED,
     UNKNOWN,
-
+}
+impl fmt::Display for PlaybackState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PlaybackState::PLAYING => write!(f, "Playing"),
+            PlaybackState::PAUSED => write!(f, "Paused"),
+            PlaybackState::STOPPED => write!(f, "Stopped"),
+            PlaybackState::UNKNOWN => write!(f, ""),
+        }
+    }
 }
 #[cfg(target_os = "windows")]
 impl From<GlobalSystemMediaTransportControlsSessionPlaybackStatus> for PlaybackState {
@@ -39,7 +48,6 @@ impl From<PlaybackStatus> for PlaybackState {
         }
     }
 }
-
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum MediaType {

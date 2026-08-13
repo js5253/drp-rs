@@ -43,6 +43,7 @@ fn restart_service() -> Result<(), anyhow::Error> {
 fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider>> {
     // in the meantime, use only the first metadata provider.
     if cfg!(target_os = "linux") {
+        println!("using linux mpris");
         Some(Box::new(MprisParser::new()))
     } else if cfg!(target_os = "windows") {
         Some(Box::new(WindowsParser::default()))
@@ -52,7 +53,6 @@ fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider>> {
 }
 
 fn ui(settings: Arc<RwLock<AppSettings>>) {
-    println!("{:?}", settings);
     #[allow(clippy::unwrap_used)]
     let settings_reader = settings.read().unwrap();
     let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
@@ -64,6 +64,7 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
 
     let mut extension_enabled_textbox = CheckButton::default()
         .with_label("Enable Extension Host")
+        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
         .below_of(&save_label, 2);
     let _ = extension_enabled_textbox.set_callback(|_| {
         // handle this later
@@ -103,7 +104,6 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
 fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Send>> {
     #[allow(clippy::unwrap_used)]
     let settings = settings.read().unwrap();
-    println!("{:?}", *settings);
     let mut provider: Option<Box<dyn MetadataProvider>> = None;
     if settings
         .metadata_sources
@@ -116,20 +116,23 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Sen
         );
     }
     let mut ipc_client: DiscordIpcClient = DiscordIpcClient::new(DISCORD_ID);
-
+    println!("Looking for Discord IPC Client");
     while !ipc_client.connect().is_ok() {}
+    println!("IPC Client Found!");
     let mut time_elapsed: u64 = 0;
 
-    println!("Something here...");
     #[allow(clippy::expect_used)]
     let prev_playing = provider.expect("Could not find a provider...");
-    println!("Discord Playing Thing");
     loop {
         #[allow(clippy::expect_used)]
         let playing_metadata = prev_playing
-            .get_playing_metadata(&settings)
-            .expect("Could not find metadata");
-        let _ = ipc_client.set_activity(
+            .get_playing_metadata(&settings);
+        let Some(playing_metadata) = playing_metadata else {
+            continue;
+        };
+        println!("{:?}", playing_metadata);
+        
+        let activity = ipc_client.set_activity(
             Activity::new()
                 .activity_type(match playing_metadata.media_type {
                     metadata_providers::MediaType::AUDIO => {
@@ -142,15 +145,15 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Sen
                         discord_rich_presence::activity::ActivityType::Playing
                     }
                 })
+                .name(playing_metadata.subprovider_name.unwrap_or(String::from("Media")))
                 .assets(
                     Assets::new()
-                        .large_image("https://cdn.frankerfacez.com/emoticon/660211/4")
-                        .small_image("https://cdn.frankerfacez.com/emoticon/660211/4"),
+                        .large_image(playing_metadata.metadata_media.clone().unwrap_or(String::from("https://cdn.frankerfacez.com/emoticon/660211/4")))
+                        .small_image(playing_metadata.metadata_media.clone().unwrap_or(String::from("https://cdn.frankerfacez.com/emoticon/660211/4")))
                 )
                 .details(format!(
                     "{} - {}",
                     playing_metadata.title,
-                    playing_metadata.aux_title.unwrap_or_default()
                 ))
                 .state(
                     format!(
