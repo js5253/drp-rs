@@ -51,7 +51,6 @@ impl MetadataProvider for MprisParser {
         let progress = player.get_position().ok().filter(|pred| !pred.is_zero());
         let binding = player.get_metadata().ok()?;
         let metadata = binding.as_hashmap();
-        println!("Hello World");
         let media_type: MediaType = {
             if self
                 .process_types
@@ -70,9 +69,8 @@ impl MetadataProvider for MprisParser {
             }
         };
         let title: Option<&String> = metadata.get("xesam:title").and_then(|title| title.as_string());
-        let artist: Option<String> = metadata.get("xesam:artist").and_then(|artist| artist.as_str_array()).map(|artist| artist.join(", ")); // could be None, in which case it should still go through the rest of the code and just show the title
-        let aux_title = metadata.get("xesam:album").and_then(|aux_title| aux_title.as_string());
-        // this is way too much of a mess; i'll check it out later
+        let artist: Option<String> = metadata.get("xesam:artist").and_then(|artist| artist.as_str_array()).map(|artist| artist.join(", "));
+        let aux_title = metadata.get("xesam:album").and_then(|aux_title| aux_title.as_string()).filter(|pred| !pred.is_empty());
         let photo_url = metadata.get("mpris:artUrl").and_then(|url| url.as_string());
         let title = title?;
         let formatted_title = match artist {

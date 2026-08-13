@@ -1,10 +1,12 @@
 mod metadata_providers;
 mod settings;
 mod util;
+use anyhow::anyhow;
 use discord_rich_presence::{
     activity::{Activity, Assets},
     DiscordIpc, DiscordIpcClient,
 };
+use dotenvy_macro::dotenv;
 use fltk::{
     app::{self},
     button::{Button, CheckButton},
@@ -15,11 +17,7 @@ use fltk::{
 };
 use settings::AppSettings;
 use std::{
-    error::Error,
-    process::Command,
-    sync::{mpsc, Arc, RwLock},
-    thread,
-    time::Duration,
+    error::Error, process::Command, sync::{Arc, RwLock, mpsc}, thread, time::{Duration, Instant},
 };
 use tokio::task;
 use util::pretty_time;
@@ -29,10 +27,12 @@ use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, Meta
 use crate::metadata_providers::extension::run_server;
 
 const DELAY_TO_RECHECK: u64 = 3;
-const DISCORD_ID: &str = "1162169068418248764";
 
 const UI_DEFAULT_WIDTH: i32 = 300;
 const UI_DEFAULT_HEIGHT: i32 = 30;
+const IPC_WAITING_TIMEOUT: Duration = Duration::from_secs(60);
+
+const DISCORD_ID: &str = dotenvy_macro::dotenv!("DISCORD_ID");
 
 fn restart_service() -> Result<(), anyhow::Error> {
     let path = std::env::current_dir()?;
@@ -43,7 +43,6 @@ fn restart_service() -> Result<(), anyhow::Error> {
 fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider>> {
     // in the meantime, use only the first metadata provider.
     if cfg!(target_os = "linux") {
-        println!("using linux mpris");
         Some(Box::new(MprisParser::new()))
     } else if cfg!(target_os = "windows") {
         Some(Box::new(WindowsParser::default()))
@@ -101,7 +100,7 @@ fn ui(settings: Arc<RwLock<AppSettings>>) {
     app.run().unwrap();
 }
 
-fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Send>> {
+fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
     #[allow(clippy::unwrap_used)]
     let settings = settings.read().unwrap();
     let mut provider: Option<Box<dyn MetadataProvider>> = None;
@@ -115,9 +114,14 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> Result<(), Box<dyn Error + Sen
                 .expect("Could not find a provider for your platform! Exiting."),
         );
     }
+    let timer = Instant::now();
     let mut ipc_client: DiscordIpcClient = DiscordIpcClient::new(DISCORD_ID);
     println!("Looking for Discord IPC Client");
-    while !ipc_client.connect().is_ok() {}
+    while !ipc_client.connect().is_ok() {
+        if timer.elapsed() > IPC_WAITING_TIMEOUT {
+            return Err(anyhow!("Failed to find Discord IPC"))
+        }
+    }
     println!("IPC Client Found!");
     let mut time_elapsed: u64 = 0;
 
