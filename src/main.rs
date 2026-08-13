@@ -17,7 +17,11 @@ use fltk::{
 };
 use settings::AppSettings;
 use std::{
-    error::Error, process::Command, sync::{Arc, RwLock, mpsc}, thread, time::{Duration, Instant},
+    error::Error,
+    process::Command,
+    sync::{mpsc, Arc, RwLock},
+    thread,
+    time::{Duration, Instant},
 };
 use tokio::task;
 use util::pretty_time;
@@ -119,7 +123,7 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
     println!("Looking for Discord IPC Client");
     while !ipc_client.connect().is_ok() {
         if timer.elapsed() > IPC_WAITING_TIMEOUT {
-            return Err(anyhow!("Failed to find Discord IPC"))
+            return Err(anyhow!("Failed to find Discord IPC"));
         }
     }
     println!("IPC Client Found!");
@@ -129,13 +133,12 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
     let prev_playing = provider.expect("Could not find a provider...");
     loop {
         #[allow(clippy::expect_used)]
-        let playing_metadata = prev_playing
-            .get_playing_metadata(&settings);
+        let playing_metadata = prev_playing.get_playing_metadata(&settings);
         let Some(playing_metadata) = playing_metadata else {
             continue;
         };
         println!("{:?}", playing_metadata);
-        
+
         let activity = ipc_client.set_activity(
             Activity::new()
                 .activity_type(match playing_metadata.media_type {
@@ -149,11 +152,19 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
                         discord_rich_presence::activity::ActivityType::Playing
                     }
                 })
-                .name(playing_metadata.subprovider_name.unwrap_or(String::from("Media")))
+                .name(
+                    playing_metadata
+                        .subprovider_name
+                        .unwrap_or(String::from("Media")),
+                )
                 .assets(
                     Assets::new()
-                        .large_image(playing_metadata.metadata_media.clone().unwrap_or(String::from("https://cdn.frankerfacez.com/emoticon/660211/4")))
-                        .small_image(playing_metadata.metadata_media.clone().unwrap_or(String::from("https://cdn.frankerfacez.com/emoticon/660211/4")))
+                        .large_image(playing_metadata.metadata_media.clone().unwrap_or(
+                            String::from("https://cdn.frankerfacez.com/emoticon/660211/4"),
+                        ))
+                        .small_image(playing_metadata.metadata_media.clone().unwrap_or(
+                            String::from("https://cdn.frankerfacez.com/emoticon/660211/4"),
+                        )),
                 )
                 .details(format!(
                     "{} - {}",
@@ -184,7 +195,9 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
 // }
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send>> {
-    dotenvy::dotenv_override().ok();
+    if std::option_env!("CI").is_none() {
+        dotenv().ok();
+    }
     println!("{}", DISCORD_ID);
     let data = Arc::new(RwLock::new(
         #[allow(clippy::expect_used)]
