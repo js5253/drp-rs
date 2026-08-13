@@ -31,12 +31,11 @@ use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, Meta
 use crate::metadata_providers::extension::run_server;
 
 const DELAY_TO_RECHECK: u64 = 3;
-
 const UI_DEFAULT_WIDTH: i32 = 300;
 const UI_DEFAULT_HEIGHT: i32 = 30;
 const IPC_WAITING_TIMEOUT: Duration = Duration::from_secs(60);
 
-const DISCORD_ID: &str = dotenvy_macro::dotenv!("DISCORD_ID");
+const DISCORD_ID: &str = env!("DISCORD_ID");
 
 fn restart_service() -> Result<(), anyhow::Error> {
     let path = std::env::current_dir()?;
@@ -195,10 +194,7 @@ fn service(settings: Arc<RwLock<AppSettings>>) -> anyhow::Result<()> {
 // }
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send>> {
-    if std::option_env!("CI").is_none() {
-        dotenv().ok();
-    }
-    println!("{}", DISCORD_ID);
+    dotenvy::dotenv();
     let data = Arc::new(RwLock::new(
         #[allow(clippy::expect_used)]
         AppSettings::new().expect("Could not read settings file."),

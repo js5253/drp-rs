@@ -42,3 +42,6 @@ opt-level="z"
 panic = "warn"
 unwrap_used = "warn"
 expect_used = "warn"
+
+[build-dependencies]
+dotenvy = "0.15.7"
