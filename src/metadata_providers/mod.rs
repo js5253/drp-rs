@@ -10,7 +10,7 @@ use ::windows::Media::{
 
 use crate::settings::AppSettings;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PlaybackState {
     PLAYING,
     PAUSED,
@@ -49,7 +49,7 @@ impl From<PlaybackStatus> for PlaybackState {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum MediaType {
     AUDIO,
     VIDEO,
@@ -65,7 +65,7 @@ impl From<MediaPlaybackType> for MediaType {
         }
     }
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Metadata {
     pub title: String,
     pub aux_title: Option<String>,

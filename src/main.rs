@@ -130,7 +130,7 @@ fn service(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyh
         }
     }
     let mut time_elapsed: u64 = 0;
-    let prev_playing: Option<Metadata> = None;
+    let mut prev_playing: Option<Metadata> = None;
     loop {
         if token.is_cancelled() {
             return ipc_client
@@ -154,7 +154,7 @@ fn service(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyh
         let (activity_type, default_image) = match playing_metadata.media_type {
             MediaType::AUDIO => (ActivityType::Listening, String::from("https://raw.githubusercontent.com/js5253/drp-rs/refs/heads/main/assets/CD.svg?token=GHSAT0AAAAAAEE36YXNCUT4XT5CS7BPZVE62UB6J5Q")), // replace these with GitHub hosted images maybe?
             MediaType::VIDEO => (ActivityType::Watching, String::from("https://raw.githubusercontent.com/js5253/drp-rs/refs/heads/main/assets/TV.svg?token=GHSAT0AAAAAAEE36YXNTSBLSWHMRP2GYJC42UB6KSQ")),
-            MediaType::MIXED => (ActivityType::Playing, String::from("Generic Media URL")),
+            MediaType::MIXED => (ActivityType::Playing, String::from("https://raw.githubusercontent.com/js5253/drp-rs/refs/heads/main/assets/Media.svg?token=GHSAT0AAAAAAEE36YXNRCMTOTAZ2P3V46TQ2UB6MGQ")),
         };
 
         let _activity = ipc_client.set_activity(
@@ -182,7 +182,7 @@ fn service(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyh
                 .details(format!(
                     "{} - {}",
                     playing_metadata.title,
-                    playing_metadata.aux_title.unwrap_or_default()
+                    playing_metadata.aux_title.clone().unwrap_or_default()
                 ))
                 .state(
                     format!(
@@ -196,6 +196,7 @@ fn service(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyh
                     .as_str(),
                 ),
         );
+        prev_playing = Some(playing_metadata.clone());
         time_elapsed += DELAY_TO_RECHECK;
         thread::sleep(Duration::from_secs(DELAY_TO_RECHECK));
     }
@@ -211,6 +212,7 @@ async fn main() {
     };
 }
 async fn app() -> anyhow::Result<()> {
+    gtk::init()?;
     let _ = dotenvy::dotenv()?;
     let tracker = TaskTracker::new();
     let token = CancellationToken::new();

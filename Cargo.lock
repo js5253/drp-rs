@@ -776,6 +776,7 @@ dependencies = [
  "dotenvy_macro",
  "fltk",
  "futures",
+ "gtk",
  "image",
  "lazy_static",
  "mpris",
