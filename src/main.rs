@@ -26,15 +26,15 @@ use std::{
 use tokio::{signal, task};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tray_icon::{
-    menu::{Menu, MenuEvent, MenuItemKind::MenuItem},
-    Icon, TrayIconBuilder, TrayIconEvent,
+    Icon, TrayIconBuilder, TrayIconEvent, menu::{Menu, MenuEvent, MenuItemKind::MenuItem, accelerator::{Accelerator, Modifiers}},
 };
 use util::pretty_time;
 
 use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
 
 use crate::{
-    metadata_providers::{MediaType, Metadata, extension::run_server}, util::get_action_string,
+    metadata_providers::{extension::run_server, MediaType, Metadata},
+    util::get_action_string,
 };
 
 const DELAY_TO_RECHECK: u64 = 3;
@@ -133,8 +133,9 @@ fn service(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyh
     let prev_playing: Option<Metadata> = None;
     loop {
         if token.is_cancelled() {
-            return ipc_client.close().map_err(|_| anyhow!("could not close discord ipc?"));
-            
+            return ipc_client
+                .close()
+                .map_err(|_| anyhow!("could not close discord ipc?"));
         }
         #[allow(clippy::expect_used)]
         let playing_metadata = provider
@@ -143,7 +144,7 @@ fn service(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyh
             .get_playing_metadata(&settings);
 
         if playing_metadata != prev_playing {
-         time_elapsed = 0;   
+            time_elapsed = 0;
         }
 
         let Some(playing_metadata) = playing_metadata else {
@@ -151,8 +152,8 @@ fn service(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyh
         };
 
         let (activity_type, default_image) = match playing_metadata.media_type {
-            MediaType::AUDIO => (ActivityType::Listening, String::from("Listening URL")), // replace these with GitHub hosted images maybe?
-            MediaType::VIDEO => (ActivityType::Watching, String::from("Watching URL")),
+            MediaType::AUDIO => (ActivityType::Listening, String::from("https://raw.githubusercontent.com/js5253/drp-rs/refs/heads/main/assets/CD.svg?token=GHSAT0AAAAAAEE36YXNCUT4XT5CS7BPZVE62UB6J5Q")), // replace these with GitHub hosted images maybe?
+            MediaType::VIDEO => (ActivityType::Watching, String::from("https://raw.githubusercontent.com/js5253/drp-rs/refs/heads/main/assets/TV.svg?token=GHSAT0AAAAAAEE36YXNTSBLSWHMRP2GYJC42UB6KSQ")),
             MediaType::MIXED => (ActivityType::Playing, String::from("Generic Media URL")),
         };
 
@@ -165,8 +166,18 @@ fn service(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyh
                 ))
                 .assets(
                     Assets::new()
-                        .large_image(&default_image)
-                        .small_image(&default_image),
+                        .large_image(
+                            playing_metadata
+                                .metadata_media
+                                .clone()
+                                .unwrap_or(default_image.clone()),
+                        )
+                        .large_image(
+                            playing_metadata
+                                .metadata_media
+                                .clone()
+                                .unwrap_or(default_image),
+                        ),
                 )
                 .details(format!(
                     "{} - {}",
@@ -215,7 +226,7 @@ async fn app() -> anyhow::Result<()> {
 
     let icon_image = image::open("assets/play.png")?;
     let menu = Menu::new();
-    let _ = menu.append_items(&[&tray_icon::menu::MenuItem::new("Menu item #3", true, None)]);
+    let _ = menu.append_items(&[&tray_icon::menu::MenuItem::new("&Quit", true, Some(Accelerator::new(Some(Modifiers::ALT), tray_icon::menu::accelerator::Code::KeyQ)))]);
     let icon = Icon::from_rgba(
         icon_image.as_bytes().to_vec(),
         icon_image.width(),
