@@ -3,7 +3,7 @@ mod settings;
 mod util;
 use anyhow::anyhow;
 use discord_rich_presence::{
-    activity::{Activity, Assets},
+    activity::{Activity, ActivityType, Assets},
     DiscordIpc, DiscordIpcClient,
 };
 use dotenvy::dotenv;
@@ -23,17 +23,19 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tokio::{task, signal};
+use tokio::{signal, task};
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuItemKind::MenuItem},
     Icon, TrayIconBuilder, TrayIconEvent,
 };
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use util::pretty_time;
 
 use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
 
-use crate::{metadata_providers::extension::run_server, util::get_action_string};
+use crate::{
+    metadata_providers::{MediaType, Metadata, extension::run_server}, util::get_action_string,
+};
 
 const DELAY_TO_RECHECK: u64 = 3;
 const UI_DEFAULT_WIDTH: i32 = 300;
@@ -122,56 +124,49 @@ fn service(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyh
     }
     let timer = Instant::now();
     let mut ipc_client: DiscordIpcClient = DiscordIpcClient::new(DISCORD_ID);
-    println!("Looking for Discord IPC Client");
     while !ipc_client.connect().is_ok() {
         if timer.elapsed() > IPC_WAITING_TIMEOUT {
             return Err(anyhow!("Failed to find Discord IPC"));
         }
     }
-    println!("IPC Client Found!");
     let mut time_elapsed: u64 = 0;
-
+    let prev_playing: Option<Metadata> = None;
     loop {
         if token.is_cancelled() {
-            ipc_client.close();
-            return Ok(());
+            return ipc_client.close().map_err(|_| anyhow!("could not close discord ipc?"));
+            
         }
         #[allow(clippy::expect_used)]
         let playing_metadata = provider
             .as_ref()
             .expect("No provider was found for playing metadata")
             .get_playing_metadata(&settings);
+
+        if playing_metadata != prev_playing {
+         time_elapsed = 0;   
+        }
+
         let Some(playing_metadata) = playing_metadata else {
             continue;
         };
-        println!("{:?}", playing_metadata);
+
+        let (activity_type, default_image) = match playing_metadata.media_type {
+            MediaType::AUDIO => (ActivityType::Listening, String::from("Listening URL")), // replace these with GitHub hosted images maybe?
+            MediaType::VIDEO => (ActivityType::Watching, String::from("Watching URL")),
+            MediaType::MIXED => (ActivityType::Playing, String::from("Generic Media URL")),
+        };
 
         let _activity = ipc_client.set_activity(
             Activity::new()
-                .activity_type(match playing_metadata.media_type {
-                    metadata_providers::MediaType::AUDIO => {
-                        discord_rich_presence::activity::ActivityType::Listening
-                    }
-                    metadata_providers::MediaType::VIDEO => {
-                        discord_rich_presence::activity::ActivityType::Watching
-                    }
-                    metadata_providers::MediaType::MIXED => {
-                        discord_rich_presence::activity::ActivityType::Playing
-                    }
-                })
-                .name(
-                    get_action_string(&playing_metadata.media_type, playing_metadata.title.clone())
-                    // playing_metadata
-                        // .subprovider_name
-                )
+                .activity_type(activity_type)
+                .name(get_action_string(
+                    &playing_metadata.media_type,
+                    playing_metadata.title.clone(),
+                ))
                 .assets(
                     Assets::new()
-                        .large_image(playing_metadata.metadata_media.clone().unwrap_or(
-                            String::from("https://cdn.frankerfacez.com/emoticon/660211/4"),
-                        ))
-                        .small_image(playing_metadata.metadata_media.clone().unwrap_or(
-                            String::from("https://cdn.frankerfacez.com/emoticon/660211/4"),
-                        )),
+                        .large_image(&default_image)
+                        .small_image(&default_image),
                 )
                 .details(format!(
                     "{} - {}",
@@ -200,11 +195,11 @@ async fn main() {
     let app = app().await;
 
     match app {
-        Ok(()) => {},
-        Err(err) => println!("Failed to run drp.rs. Error: {:?}", err)
+        Ok(()) => {}
+        Err(err) => println!("Failed to run drp.rs. Error: {:?}", err),
     };
 }
-async fn app() -> anyhow::Result<()>{
+async fn app() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv()?;
     let tracker = TaskTracker::new();
     let token = CancellationToken::new();
@@ -246,18 +241,8 @@ async fn app() -> anyhow::Result<()>{
     match signal::ctrl_c().await {
         Ok(()) => {
             token.cancel();
-        },
-        Err(err) => {},
+        }
+        Err(err) => {}
     }
     Ok(())
-    // handle tray events
-    // loop {
-    //     if let Ok(event) = TrayIconEvent::receiver().try_recv() {
-    //         println!("tray event: {:?}", event);
-    //     }
-
-    //     if let Ok(event) = MenuEvent::receiver().try_recv() {
-    //         println!("menu event: {:?}", event);
-    //     }
-    // }
 }
