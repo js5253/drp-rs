@@ -69,7 +69,6 @@ impl From<MediaPlaybackType> for MediaType {
 pub struct Metadata {
     pub title: String,
     pub aux_title: Option<String>,
-    /*Progress in percentage of 1 */
     pub progress: Option<Duration>,
     pub state: Option<PlaybackState>,
     pub provider_name: String,
