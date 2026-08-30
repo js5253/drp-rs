@@ -55,7 +55,7 @@ fn restart_service() -> Result<(), anyhow::Error> {
     std::process::exit(0);
 }
 
-fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider>> {
+fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider + Send>> {
     // in the meantime, use only the first metadata provider.
     if cfg!(target_os = "linux") {
         Some(Box::new(MprisParser::new()))
@@ -112,7 +112,7 @@ async fn service(
     token: CancellationToken,
 ) -> anyhow::Result<()> {
     let settings = settings.read().await;
-    let mut provider: Option<Box<dyn MetadataProvider>> = None;
+    let mut provider: Option<Box<dyn MetadataProvider + Send>> = None;
     if settings
         .metadata_sources
         .contains(&"native_now_playing".to_string())
