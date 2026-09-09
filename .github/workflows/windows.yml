@@ -12,10 +12,21 @@ env:
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Git Repo
+        uses: actions/checkout@v3
+      - name: Output Git Release
+        run: | 
+          echo ${{ github.sha }} > Release.txt \
+          && echo "RELEASE_VERSION=$(git rev-parse --short HEAD)" | tee -a $GITHUB_ENV
       - name: Build (Windows)
         run: cargo build --verbose
       - name: Run tests
         run: cargo test --verbose
+      - name: Upload release
+        uses: softprops/action-gh-release@v3
+        with: 
+          tag_name: ${{env.RELEASE_VERSION}}
+          files: |
+            Release.txt
+            target/release/drp

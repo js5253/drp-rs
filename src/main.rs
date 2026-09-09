@@ -26,9 +26,9 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tray_icon::{
     menu::{
         accelerator::{Accelerator, Modifiers},
-        Menu,
+        Menu, MenuEvent,
     },
-    Icon, TrayIconBuilder,
+    Icon, TrayIconBuilder, TrayIconEvent,
 };
 use util::pretty_time;
 
@@ -65,7 +65,18 @@ fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider + Send>> {
         None
     }
 }
+fn setup_tray_icon() -> anyhow::Result<()> {
 
+
+    if let Ok(event) = TrayIconEvent::receiver().try_recv() {
+        println!("tray event: {:?}", event);
+    }
+
+    if let Ok(event) = MenuEvent::receiver().try_recv() {
+        println!("menu event: {:?}", event);
+    }
+    Ok(())
+}
 async fn ui(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyhow::Result<()> {
     let _settings_reader = settings.read().await;
     let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
@@ -200,7 +211,7 @@ async fn service(
 
 #[tokio::main]
 async fn main() {
-    app().await;
+    let _ = app().await;
 }
 async fn app() -> anyhow::Result<()> {
     gtk::init()?;
@@ -217,7 +228,7 @@ async fn app() -> anyhow::Result<()> {
     let extension_token = token.clone();
     let ui_token = token.clone();
 
-    let icon_image = image::open("assets/play.png")?;
+        let icon_image = image::open("assets/play.png")?;
     let menu = Menu::new();
     let _ = menu.append_items(&[&tray_icon::menu::MenuItem::new(
         "&Quit",
@@ -237,9 +248,10 @@ async fn app() -> anyhow::Result<()> {
         .with_icon(icon)
         .with_menu(Box::new(menu))
         .build()?;
+    
     tracker.spawn(async { ui(ui_lock, ui_token).await });
     tracker.spawn(async { service(service_lock, service_token).await });
-
+    tracker.spawn_blocking(setup_tray_icon);
     if extension_lock.read().await.extension_host_enabled {
         tracker.spawn(async { run_server(extension_token).await });
     }
