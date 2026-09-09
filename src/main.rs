@@ -66,8 +66,6 @@ fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider + Send>> {
     }
 }
 fn setup_tray_icon() -> anyhow::Result<()> {
-
-
     if let Ok(event) = TrayIconEvent::receiver().try_recv() {
         println!("tray event: {:?}", event);
     }
@@ -218,7 +216,7 @@ async fn app() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv()?;
     let tracker = TaskTracker::new();
     let token = CancellationToken::new();
-    let data = Arc::new(RwLock::new(AppSettings::new()?));
+    let data = Arc::new(RwLock::new(AppSettings::load_or_default()));
 
     let ui_lock = Arc::clone(&data);
     let extension_lock = Arc::clone(&data);
@@ -228,7 +226,7 @@ async fn app() -> anyhow::Result<()> {
     let extension_token = token.clone();
     let ui_token = token.clone();
 
-        let icon_image = image::open("assets/play.png")?;
+    let icon_image = image::open("assets/play.png")?;
     let menu = Menu::new();
     let _ = menu.append_items(&[&tray_icon::menu::MenuItem::new(
         "&Quit",
@@ -248,7 +246,7 @@ async fn app() -> anyhow::Result<()> {
         .with_icon(icon)
         .with_menu(Box::new(menu))
         .build()?;
-    
+
     tracker.spawn(async { ui(ui_lock, ui_token).await });
     tracker.spawn(async { service(service_lock, service_token).await });
     tracker.spawn_blocking(setup_tray_icon);
