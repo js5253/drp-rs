@@ -25,10 +25,10 @@ tracing = "0.1.44"
 tower = "0.5.3"
 tower-http = { version = "0.7.0", features = ["trace"] }
 dotenvy_macro = "0.15.7"
-tray-icon = "0.24.2"
 image = "0.25.10"
 tokio-util = { version = "0.7.19", features = ["rt"] }
-gtk = "0.18.2"
+tray-icon = "0.26.1"
+log = "0.4.34"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 mpris = "2.1.0"

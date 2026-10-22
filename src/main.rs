@@ -10,33 +10,33 @@ use dotenvy::dotenv;
 use fltk::{
     app::{self},
     button::{Button, CheckButton},
-    input::Input,
     prelude::*,
     text::TextDisplay,
     window::Window,
 };
+use futures::executor::block_on;
 use settings::AppSettings;
-use std::sync::Arc;
 use std::{
     process::Command,
     time::{Duration, Instant},
 };
-use tokio::{signal, sync::RwLock};
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use tray_icon::{
-    menu::{
-        accelerator::{Accelerator, Modifiers},
-        Menu, MenuEvent,
-    },
-    Icon, TrayIconBuilder, TrayIconEvent,
+use std::{sync::Arc, thread};
+use tokio::{
+    signal,
+    sync::{mpsc, RwLock},
+    task::spawn_blocking,
 };
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tracing_subscriber::EnvFilter;
+
 use util::pretty_time;
 
 use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
 
 use crate::{
-    metadata_providers::{extension::run_server, MediaType, Metadata},
-    util::get_action_string,
+    metadata_providers::{
+        MediaType, Metadata, extension::{self, RegisterActivityBody, run_server},
+    }, util::get_action_string,
 };
 const DELAY_TO_RECHECK: u64 = 3;
 const UI_DEFAULT_WIDTH: i32 = 300;
@@ -65,68 +65,26 @@ fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider + Send>> {
         None
     }
 }
-fn setup_tray_icon() -> anyhow::Result<()> {
-    if let Ok(event) = TrayIconEvent::receiver().try_recv() {
-        println!("tray event: {:?}", event);
-    }
-
-    if let Ok(event) = MenuEvent::receiver().try_recv() {
-        println!("menu event: {:?}", event);
-    }
-    Ok(())
-}
-async fn ui(settings: Arc<RwLock<AppSettings>>, token: CancellationToken) -> anyhow::Result<()> {
-    let _settings_reader = settings.read().await;
-    let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
-    let mut wind = Window::default().with_size(500, 200).center_screen();
-
-    let mut extension_enabled_textbox = CheckButton::default()
-        .with_label("Enable Extension Host")
-        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
-        .center_of_parent();
-    extension_enabled_textbox.set_callback(|_| {
-        // handle this later
-    });
-
-    let mut save_button = Button::default()
-        .with_label("Save Changes")
-        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
-        .below_of(&extension_enabled_textbox, 10);
-    let service_status_label = TextDisplay::default()
-        .with_label("Service Status")
-        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
-        .below_of(&save_button, 3);
-
-    save_button.set_callback(|_| {
-        let _ = restart_service();
-    });
-    wind.add(&save_button);
-    wind.add(&extension_enabled_textbox);
-    wind.add(&service_status_label);
-    wind.end();
-    wind.show();
-
-    let _ = app.run();
-
-    loop {
-        if token.is_cancelled() {
-            return Ok(());
-        }
-        tokio::time::sleep(Duration::from_secs(DELAY_TO_RECHECK)).await;
-    }
-}
 
 async fn service(
     settings: Arc<RwLock<AppSettings>>,
     token: CancellationToken,
+    mut rx: mpsc::Receiver<Metadata>,
 ) -> anyhow::Result<()> {
     let settings = settings.read().await;
-    let mut provider: Option<Box<dyn MetadataProvider + Send>> = None;
+    let mut providers = Vec::new();
+    let provider: Option<Box<dyn MetadataProvider + Send>> = None;
     if settings
         .metadata_sources
         .contains(&"native_now_playing".to_string())
     {
-        provider = get_os_specific_provider();
+        providers.push(provider);
+    }
+    if settings
+        .metadata_sources
+        .contains(&"extension_host".to_string())
+    {
+        providers.push(extension::run_server(tx, token));
     }
     let timer = Instant::now();
     let mut ipc_client: DiscordIpcClient = DiscordIpcClient::new(DISCORD_ID);
@@ -137,24 +95,17 @@ async fn service(
     }
     let mut time_elapsed: u64 = 0;
     let mut prev_playing: Option<Metadata> = None;
-    loop {
+    while let Some(playing_metadata) = rx.recv().await {
         if token.is_cancelled() {
             return ipc_client
                 .close()
                 .map_err(|_| anyhow!("could not close discord ipc?"));
         }
-        let playing_metadata = provider
-            .as_ref()
-            .ok_or(anyhow!("No provider was found for getting metadata"))?
-            .get_playing_metadata(&settings);
 
-        if playing_metadata != prev_playing {
-            time_elapsed = 0;
+        if prev_playing.as_ref().is_some_and(|metadata| *metadata == playing_metadata) {
+            continue;
         }
 
-        let Some(playing_metadata) = playing_metadata else {
-            continue;
-        };
 
         let (activity_type, default_image) = match playing_metadata.media_type {
             MediaType::AUDIO => (ActivityType::Listening, String::from(LISTENING_ICON_URL)), // replace these with GitHub hosted images maybe?
@@ -205,18 +156,31 @@ async fn service(
         time_elapsed += DELAY_TO_RECHECK;
         tokio::time::sleep(Duration::from_secs(DELAY_TO_RECHECK)).await;
     }
+    Ok(())
 }
 
-#[tokio::main]
-async fn main() {
-    let _ = app().await;
+fn main() {
+    let _unused = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .name("my-runtime")
+        .build()
+        .unwrap()
+        .block_on(async { app().await });
 }
 async fn app() -> anyhow::Result<()> {
-    gtk::init()?;
     let _ = dotenvy::dotenv()?;
+    tracing_subscriber::fmt()
+        // This allows you to use, e.g., `RUST_LOG=info` or `RUST_LOG=debug`
+        // when running the app to set log levels.
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .or_else(|_| EnvFilter::try_new("drp-rs=error,tower_http=warn"))
+                .unwrap(),
+        )
+        .init();
     let tracker = TaskTracker::new();
     let token = CancellationToken::new();
-    let data = Arc::new(RwLock::new(AppSettings::load_or_default()));
+    let data = Arc::new(RwLock::new(AppSettings::load_or_default().unwrap()));
 
     let ui_lock = Arc::clone(&data);
     let extension_lock = Arc::clone(&data);
@@ -225,34 +189,45 @@ async fn app() -> anyhow::Result<()> {
     let service_token = token.clone();
     let extension_token = token.clone();
     let ui_token = token.clone();
+    let (mut tx, rx) = mpsc::channel(100);
+    // ui can't be moved outside the main thread; there's probably a way to solve this.
+    let _settings_reader = block_on(async { ui_lock.read().await });
+    let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
+    let mut wind = Window::default().with_size(500, 200).center_screen();
 
-    let icon_image = image::open("assets/play.png")?;
-    let menu = Menu::new();
-    let _ = menu.append_items(&[&tray_icon::menu::MenuItem::new(
-        "&Quit",
-        true,
-        Some(Accelerator::new(
-            Some(Modifiers::ALT),
-            tray_icon::menu::accelerator::Code::KeyQ,
-        )),
-    )]);
-    let icon = Icon::from_rgba(
-        icon_image.as_bytes().to_vec(),
-        icon_image.width(),
-        icon_image.height(),
-    )?;
-    let tray_icon = TrayIconBuilder::new()
-        .with_tooltip("system-tray - tray icon library!")
-        .with_icon(icon)
-        .with_menu(Box::new(menu))
-        .build()?;
+    let mut extension_enabled_textbox = CheckButton::default()
+        .with_label("Enable Extension Host")
+        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
+        .center_of_parent();
+    extension_enabled_textbox.set_callback(|_| {
+        // handle this later
+    });
 
-    tracker.spawn(async { ui(ui_lock, ui_token).await });
-    tracker.spawn(async { service(service_lock, service_token).await });
-    tracker.spawn_blocking(setup_tray_icon);
+    let mut save_button = Button::default()
+        .with_label("Save Changes")
+        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
+        .below_of(&extension_enabled_textbox, 10);
+    let service_status_label = TextDisplay::default()
+        .with_label("Service Status")
+        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
+        .below_of(&save_button, 3);
+
+    save_button.set_callback(|_| {
+        let _ = restart_service();
+    });
+    wind.add(&save_button);
+    wind.add(&extension_enabled_textbox);
+    wind.add(&service_status_label);
+    wind.end();
+    wind.show();
+    let _ = app.run();
+    // end ui section here
+    // tracker.spawn(async { ui(ui_lock, ui_token).await });
+    tracker.spawn(async { service(service_lock, service_token, rx).await });
     if extension_lock.read().await.extension_host_enabled {
-        tracker.spawn(async { run_server(extension_token).await });
+        tracker.spawn(async { run_server(tx, extension_token).await });
     }
+
     tracker.close();
     tracker.wait().await;
     match signal::ctrl_c().await {

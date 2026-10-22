@@ -78,6 +78,7 @@ pub struct Metadata {
 }
 
 pub trait MetadataProvider {
+    fn register_thread();
     fn get_playing_metadata(&self, settings: &AppSettings) -> Option<Metadata>;
 }
 
