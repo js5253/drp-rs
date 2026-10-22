@@ -2,6 +2,8 @@ use std::{fmt, time::Duration};
 
 #[cfg(target_os = "linux")]
 use mpris::PlaybackStatus;
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 // use windows::Media::{MediaPlaybackType, Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus};
 #[cfg(target_os = "windows")]
 use ::windows::Media::{
@@ -78,8 +80,7 @@ pub struct Metadata {
 }
 
 pub trait MetadataProvider {
-    fn register_thread();
-    fn get_playing_metadata(&self, settings: &AppSettings) -> Option<Metadata>;
+    fn register_thread(&self, tx: mpsc::Sender<Metadata>, token: CancellationToken);
 }
 
 pub mod extension;

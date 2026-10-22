@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used)]
 mod metadata_providers;
 mod settings;
 mod util;
@@ -35,7 +36,7 @@ use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, Meta
 
 use crate::{
     metadata_providers::{
-        MediaType, Metadata, extension::{self, RegisterActivityBody, run_server},
+        MediaType, Metadata, extension::ExtensionProvider,
     }, util::get_action_string,
 };
 const DELAY_TO_RECHECK: u64 = 3;
@@ -65,27 +66,39 @@ fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider + Send>> {
         None
     }
 }
+async fn init_providers(
+    tx: mpsc::Sender<Metadata>,
+    settings: Arc<RwLock<AppSettings>>,
+    token: CancellationToken
+
+) {
+    let settings = settings.read().await;
+    if settings
+        .metadata_sources
+        .contains(&"native_now_playing".to_string())
+    {
+        match get_os_specific_provider() {
+            Some(provider) => {
+                provider.register_thread(tx.clone(), token.clone());
+            },
+            None => {},
+        }
+
+    }
+    if settings
+        .metadata_sources
+        .contains(&"extension_host".to_string())
+    {
+        ExtensionProvider::default().register_thread(tx.clone(), token);
+    }
+
+}
 
 async fn service(
     settings: Arc<RwLock<AppSettings>>,
     token: CancellationToken,
     mut rx: mpsc::Receiver<Metadata>,
 ) -> anyhow::Result<()> {
-    let settings = settings.read().await;
-    let mut providers = Vec::new();
-    let provider: Option<Box<dyn MetadataProvider + Send>> = None;
-    if settings
-        .metadata_sources
-        .contains(&"native_now_playing".to_string())
-    {
-        providers.push(provider);
-    }
-    if settings
-        .metadata_sources
-        .contains(&"extension_host".to_string())
-    {
-        providers.push(extension::run_server(tx, token));
-    }
     let timer = Instant::now();
     let mut ipc_client: DiscordIpcClient = DiscordIpcClient::new(DISCORD_ID);
     while !ipc_client.connect().is_ok() {
@@ -189,7 +202,13 @@ async fn app() -> anyhow::Result<()> {
     let service_token = token.clone();
     let extension_token = token.clone();
     let ui_token = token.clone();
+
+
+
     let (mut tx, rx) = mpsc::channel(100);
+    init_providers(tx, service_lock, service_token).await;
+
+
     // ui can't be moved outside the main thread; there's probably a way to solve this.
     let _settings_reader = block_on(async { ui_lock.read().await });
     let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
@@ -223,10 +242,8 @@ async fn app() -> anyhow::Result<()> {
     let _ = app.run();
     // end ui section here
     // tracker.spawn(async { ui(ui_lock, ui_token).await });
-    tracker.spawn(async { service(service_lock, service_token, rx).await });
-    if extension_lock.read().await.extension_host_enabled {
-        tracker.spawn(async { run_server(tx, extension_token).await });
-    }
+    tracker.spawn(async { service(extension_lock, extension_token, rx).await });
+
 
     tracker.close();
     tracker.wait().await;

@@ -3,6 +3,8 @@ use std::{ops::Deref, time::Duration};
 
 use crate::metadata_providers::MediaType;
 
+#[cfg(not(target_os = "linux"))]
+use crate::metadata_providers::Metadata;
 #[cfg(target_os = "linux")]
 use crate::metadata_providers::{Metadata, PlaybackState};
 use crate::{metadata_providers::MetadataProvider, settings::AppSettings};
@@ -10,6 +12,12 @@ use crate::{metadata_providers::MetadataProvider, settings::AppSettings};
 #[cfg(target_os = "linux")]
 use mpris::{self, PlayerFinder};
 use serde::Deserialize;
+#[cfg(not(target_os = "linux"))]
+use tokio::sync::mpsc;
+#[cfg(target_os = "linux")]
+use tokio::sync::mpsc;
+#[cfg(not(target_os = "linux"))]
+use tokio_util::sync::CancellationToken;
 
 #[derive(Deserialize)]
 struct ProcessTypes {
@@ -23,15 +31,13 @@ pub struct MprisParser {
 
 #[cfg(not(target_os = "linux"))]
 impl MetadataProvider for MprisParser {
-    fn get_playing_metadata(&self, settings: &AppSettings) -> Option<super::Metadata> {
-        None
-    }
+    fn register_thread(&self, mut tx: mpsc::Sender<Metadata>, token: CancellationToken) {}
 }
 
 impl MprisParser {
     pub fn new() -> Self {
         Self {
-            process_types: toml::from_str(include_str!("../processes.toml")).unwrap_or(
+            process_types: toml::from_str(include_str!("../../config/processes.toml")).unwrap_or(
                 ProcessTypes {
                     music: Vec::new(),
                     video: Vec::new(),
@@ -43,7 +49,7 @@ impl MprisParser {
 
 #[cfg(target_os = "linux")]
 impl MetadataProvider for MprisParser {
-    fn get_playing_metadata(&self, settings: &AppSettings) -> Option<Metadata> {
+    fn register_thread(&self, mut tx: mpsc::Sender<Metadata>, token: CancellationToken) {
         let player = PlayerFinder::new().ok()?;
         let player = player.find_active().ok()?;
 
@@ -68,24 +74,35 @@ impl MetadataProvider for MprisParser {
                 MediaType::MIXED
             }
         };
-        let title = metadata.get("xesam:title").and_then(|title| title.as_string());
-        let artist = metadata.get("xesam:artist").and_then(|artist| artist.as_str_array()).map(|artist| artist.join(", "));
-        let aux_title = metadata.get("xesam:album").and_then(|aux_title| aux_title.as_string()).filter(|pred| !pred.is_empty());
+        let title = metadata
+            .get("xesam:title")
+            .and_then(|title| title.as_string());
+        let artist = metadata
+            .get("xesam:artist")
+            .and_then(|artist| artist.as_str_array())
+            .map(|artist| artist.join(", "));
+        let aux_title = metadata
+            .get("xesam:album")
+            .and_then(|aux_title| aux_title.as_string())
+            .filter(|pred| !pred.is_empty());
         let photo_url = metadata.get("mpris:artUrl").and_then(|url| url.as_string());
         let title = title?;
         let formatted_title = match artist {
             None => title.clone(),
             Some(artist) => format!("{} - {}", title, artist),
         };
-        Some(Metadata {
+        tx.send(Metadata {
             title: formatted_title.to_owned(),
             aux_title: aux_title.cloned(),
             progress,
-            state: status.map(|status| {status.into()}),
+            state: status.map(|status| status.into()),
             provider_name: String::from("MPRIS provider"),
             subprovider_name: Some(player.identity().to_string()),
             media_type,
-            metadata_media: photo_url.cloned()
+            metadata_media: photo_url.cloned(),
         })
+    }
+    fn register_thread(&self, tx: mpsc::Sender<Metadata>) {
+        tokio::spawn(async { self.get_playing_metadata })
     }
 }

@@ -12,8 +12,9 @@ enum PlaybackType {
 pub struct WindowsParser {}
 #[cfg(not(target_os = "windows"))]
 impl MetadataProvider for WindowsParser {
-    fn get_playing_metadata(&self, settings: &AppSettings) -> Option<super::Metadata> {
-        None
+
+    fn register_thread(&self, tx: tokio::sync::mpsc::Sender<super::Metadata>, token: tokio_util::sync::CancellationToken) {
+        
     }
 }
 
