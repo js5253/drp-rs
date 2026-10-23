@@ -16,6 +16,7 @@ use fltk::{
     window::Window,
 };
 use futures::executor::block_on;
+use image::ImageReader;
 use settings::AppSettings;
 use std::{
     process::Command,
@@ -29,15 +30,15 @@ use tokio::{
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing_subscriber::EnvFilter;
+use tray_icon::{menu::MenuEvent, Icon, TrayIconBuilder, TrayIconEvent};
 
 use util::pretty_time;
 
 use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
 
 use crate::{
-    metadata_providers::{
-        MediaType, Metadata, extension::ExtensionProvider,
-    }, util::get_action_string,
+    metadata_providers::{extension::ExtensionProvider, MediaType, Metadata},
+    util::get_action_string,
 };
 const DELAY_TO_RECHECK: u64 = 3;
 const UI_DEFAULT_WIDTH: i32 = 300;
@@ -69,8 +70,7 @@ fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider + Send>> {
 async fn init_providers(
     tx: mpsc::Sender<Metadata>,
     settings: Arc<RwLock<AppSettings>>,
-    token: CancellationToken
-
+    token: CancellationToken,
 ) {
     let settings = settings.read().await;
     if settings
@@ -80,18 +80,13 @@ async fn init_providers(
         match get_os_specific_provider() {
             Some(provider) => {
                 provider.register_thread(tx.clone(), token.clone());
-            },
-            None => {},
+            }
+            None => {}
         }
-
     }
-    if settings
-        .metadata_sources
-        .contains(&"extension".to_string())
-    {
+    if settings.metadata_sources.contains(&"extension".to_string()) {
         ExtensionProvider::default().register_thread(tx.clone(), token);
     }
-
 }
 
 async fn service(
@@ -115,10 +110,12 @@ async fn service(
                 .map_err(|_| anyhow!("could not close discord ipc?"));
         }
 
-        if prev_playing.as_ref().is_some_and(|metadata| *metadata == playing_metadata) {
+        if prev_playing
+            .as_ref()
+            .is_some_and(|metadata| *metadata == playing_metadata)
+        {
             continue;
         }
-
 
         let (activity_type, default_image) = match playing_metadata.media_type {
             MediaType::AUDIO => (ActivityType::Listening, String::from(LISTENING_ICON_URL)), // replace these with GitHub hosted images maybe?
@@ -203,11 +200,8 @@ async fn app() -> anyhow::Result<()> {
     let extension_token = token.clone();
     let ui_token = token.clone();
 
-
-
     let (mut tx, rx) = mpsc::channel(100);
     init_providers(tx, service_lock, service_token).await;
-
 
     // ui can't be moved outside the main thread; there's probably a way to solve this.
     let _settings_reader = block_on(async { ui_lock.read().await });
@@ -240,10 +234,27 @@ async fn app() -> anyhow::Result<()> {
     wind.end();
     wind.show();
     let _ = app.run();
-    // end ui section here
-    // tracker.spawn(async { ui(ui_lock, ui_token).await });
-    tracker.spawn(async { service(extension_lock, extension_token, rx).await });
+    let (icon_rgba, icon_width, icon_height) = {
+        let image = image::open("path")
+            .expect("Failed to open icon path")
+            .into_rgba8();
+        let (width, height) = image.dimensions();
+        let rgba = image.into_raw();
+        (rgba, width, height)
+    };
+    let tray_icon = TrayIconBuilder::new()
+        .with_tooltip("system-tray - tray icon library!")
+        .with_icon(Icon::from_rgba(icon_rgba, icon_width, icon_height)?)
+        .build()?;
+    if let Ok(event) = TrayIconEvent::receiver().try_recv() {
+        println!("tray event: {:?}", event);
+    }
 
+    if let Ok(event) = MenuEvent::receiver().try_recv() {
+        println!("menu event: {:?}", event);
+    } // end ui section here
+      // tracker.spawn(async { ui(ui_lock, ui_token).await });
+    tracker.spawn(async { service(extension_lock, extension_token, rx).await });
 
     tracker.close();
     tracker.wait().await;

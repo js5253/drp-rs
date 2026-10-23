@@ -13,9 +13,9 @@ pub struct AppSettings {
 impl AppSettings {
     #[instrument]
     pub fn load_or_default() -> AppSettings {
+        let path = Path::new("config/config.toml");
         if fs::exists("config/config.toml").is_ok() {
-            let config: AppSettings = fs::read_to_string("config.toml")
-                .and_then(|config| Ok(toml::from_str(&config).map_err(|_| anyhow!("A"))))
+            let config: AppSettings = fs::read_to_string(path).map(|config| toml::from_str(&config).map_err(|_| anyhow!("A")))
                 .map_err(|_| anyhow!("B"))
                 .flatten()
                 .unwrap_or(AppSettings {
