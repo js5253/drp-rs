@@ -1,5 +1,7 @@
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
+use tracing::instrument;
 
 #[derive(Deserialize, Debug, Serialize, Clone)]
 pub struct AppSettings {
@@ -7,32 +9,38 @@ pub struct AppSettings {
     pub tautulli_server_url: Option<String>,
     pub tautulli_server_cookie: Option<String>,
     pub metadata_sources: Vec<String>,
-    pub extension_host_enabled: bool,
 }
 impl AppSettings {
-    pub fn load_or_default() -> Result<AppSettings, anyhow::Error> {
-        let path = Path::new("config.toml");
-        if fs::exists(path).is_ok_and(|item| item) {
-            let config = fs::read_to_string("config.toml")?;
-            let config = toml::from_str(config.as_str())?;
+    #[instrument]
+    pub fn load_or_default() -> AppSettings {
+        if fs::exists("config/config.toml").is_ok() {
+            let config: AppSettings = fs::read_to_string("config.toml")
+                .and_then(|config| Ok(toml::from_str(&config).map_err(|_| anyhow!("A"))))
+                .map_err(|_| anyhow!("B"))
+                .flatten()
+                .unwrap_or(AppSettings {
+                    discord_username: None,
+                    tautulli_server_url: None,
+                    tautulli_server_cookie: None,
+                    metadata_sources: vec!["native_now_playing".to_string()],
+                });
 
-            Ok(config)
+            config
         } else {
             let config = AppSettings {
                 discord_username: None,
                 tautulli_server_url: None,
                 tautulli_server_cookie: None,
                 metadata_sources: vec!["native_now_playing".to_string()],
-                extension_host_enabled: true,
             };
-            fs::write(path, toml::to_string(&config)?)?;
+            let _ = toml::to_string(&config).map_err(|_| anyhow!("")).and_then(|config| fs::write(path, config).map_err(|_| anyhow!("B")));
 
-            Ok(config)
+            config
         }
     }
     pub fn update(&mut self, new_settings: AppSettings) -> Result<(), anyhow::Error> {
         *self = new_settings;
-        fs::write(Path::new("config.toml"), toml::to_string(&self)?);
+        let _ = fs::write(Path::new("config.toml"), toml::to_string(&self)?);
         Ok(())
     }
 }

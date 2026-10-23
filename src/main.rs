@@ -87,7 +87,7 @@ async fn init_providers(
     }
     if settings
         .metadata_sources
-        .contains(&"extension_host".to_string())
+        .contains(&"extension".to_string())
     {
         ExtensionProvider::default().register_thread(tx.clone(), token);
     }
@@ -177,7 +177,7 @@ fn main() {
         .enable_all()
         .name("my-runtime")
         .build()
-        .unwrap()
+        .expect("Could not launch tokio runtime")
         .block_on(async { app().await });
 }
 async fn app() -> anyhow::Result<()> {
@@ -188,12 +188,12 @@ async fn app() -> anyhow::Result<()> {
         .with_env_filter(
             EnvFilter::try_from_default_env()
                 .or_else(|_| EnvFilter::try_new("drp-rs=error,tower_http=warn"))
-                .unwrap(),
+                .expect("Failed to set up logging"),
         )
         .init();
     let tracker = TaskTracker::new();
     let token = CancellationToken::new();
-    let data = Arc::new(RwLock::new(AppSettings::load_or_default().unwrap()));
+    let data = Arc::new(RwLock::new(AppSettings::load_or_default()));
 
     let ui_lock = Arc::clone(&data);
     let extension_lock = Arc::clone(&data);
