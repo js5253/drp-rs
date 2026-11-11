@@ -2,7 +2,7 @@
 name = "drp"
 version = "0.1.0"
 edition = "2021"
-
+repository = "https://github.com/js5253/drp-rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -41,6 +41,11 @@ windows = { version = "0.62.2", features = ["Media_Control", "Foundation", "Foun
 [profile.release]
 strip = "symbols"
 opt-level="z"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
 
 [lints.clippy]
 panic = "warn"
