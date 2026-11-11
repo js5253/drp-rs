@@ -2,7 +2,7 @@ import createContentApp from './ContentApp'
 
 console.log('[From the page context] Hello from content_scripts!')
 let drpDetected = false;
-const BASE_URL = "https://localhost:8080";
+const BASE_URL = "http://localhost:3000";
 /**
  * Extension.js content_script entrypoint. The framework calls this on
  * injection and calls the returned function on HMR/teardown to clean up.
@@ -12,7 +12,7 @@ async function determineIfDrpRunning() {
   if (drpDetected) {
     return true;
   }
-  const item = await fetch(BASE_URL + "/heartbeat");
+  const item = await fetch(BASE_URL);
   const res = await item.text();
 
   if (res == "drp.rs") {
@@ -26,19 +26,25 @@ export default function initial() {
     determineIfDrpRunning()
     const titleElement = document.querySelector('ytmusic-player-bar yt-formatted-string.title')
     const posterElement = document.querySelector('ytmusic-player-bar yt-formatted-string.byline')?.children[0]
+    console.log(titleElement, posterElement)
 
     if (!titleElement || !posterElement) return;
     if (drpDetected) {
-      const item = await fetch(BASE_URL + "/", {
-        method: "POST",
-        body: JSON.stringify({
-          subprovider_name: "YouTube Music",
-          title: titleElement.textContent,
-          artist: posterElement.textContent,
-          media_type: "music"
-        })
-      });
-      const res = await item.json();
+      try {
+        const item = await fetch(BASE_URL + "/", {
+          method: "POST",
+          body: JSON.stringify({
+            subprovider_name: "YouTube Music",
+            title: titleElement.textContent,
+            artist: posterElement.textContent,
+            media_type: "music"
+          })
+        });
+        const res = await item.json();
+
+      } finally {
+        console.log(titleElement, posterElement)
+      }
 
 
     }

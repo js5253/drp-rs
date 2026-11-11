@@ -7,7 +7,7 @@ use mpris::PlaybackStatus;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{self, Sender};
 use tokio_util::sync::CancellationToken;
-use tower_http::trace::TraceLayer;
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::EnvFilter;
 
 use crate::metadata_providers::{MediaType, Metadata, MetadataProvider};
@@ -46,8 +46,10 @@ async fn run_server(tx: mpsc::Sender<Metadata>, token: CancellationToken) -> Res
 
     let app = Router::new()
         .route("/register_activity", post(register_activity))
-        .route("/register_activity", get(heartbeat))
+        .route("/", get(heartbeat))
         .layer(TraceLayer::new_for_http())
+            .layer(CorsLayer::permissive())
+
         .with_state(AppState(tx));
     axum::serve(listener, app).await?;
     Ok(())
