@@ -11,6 +11,7 @@ use dotenvy::dotenv;
 use fltk::{
     app::{self},
     button::{Button, CheckButton},
+    group::Flex,
     prelude::*,
     text::TextDisplay,
     window::Window,
@@ -19,7 +20,9 @@ use futures::executor::block_on;
 use image::ImageReader;
 use settings::AppSettings;
 use std::{
-    process::Command,
+    env,
+    os::unix::process::CommandExt,
+    process::{self, Command},
     time::{Duration, Instant},
 };
 use std::{sync::Arc, thread};
@@ -37,12 +40,9 @@ use util::pretty_time;
 use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
 
 use crate::{
-    metadata_providers::{extension::ExtensionProvider, MediaType, Metadata},
-    util::get_action_string,
+    metadata_providers::{MediaType, Metadata, extension::{ExtensionProvider, WEB_EXTENSION_STRING}}, util::get_action_string,
 };
 const DELAY_TO_RECHECK: u64 = 3;
-const UI_DEFAULT_WIDTH: i32 = 300;
-const UI_DEFAULT_HEIGHT: i32 = 30;
 const IPC_WAITING_TIMEOUT: Duration = Duration::from_secs(60);
 
 const LISTENING_ICON_URL: &str = "https://raw.githubusercontent.com/js5253/drp-rs/refs/heads/main/assets/CD.svg?token=GHSAT0AAAAAAEE36YXNCUT4XT5CS7BPZVE62UB6J5Q";
@@ -52,11 +52,13 @@ const PLAYING_ICON_URL: &str = "https://raw.githubusercontent.com/js5253/drp-rs/
 const DISCORD_ID: &str = env!("DISCORD_ID");
 
 fn restart_service() -> Result<(), anyhow::Error> {
-    let path = std::env::current_dir()?;
-    Command::new(path);
-    std::process::exit(0);
-}
+    let exec = env::current_exe()?;
+    let args: Vec<String> = env::args().skip(1).collect();
 
+    Command::new(exec).args(args).spawn()?;
+
+    process::exit(0);
+}
 fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider + Send>> {
     // in the meantime, use only the first metadata provider.
     if cfg!(target_os = "linux") {
@@ -77,15 +79,12 @@ async fn init_providers(
         .metadata_sources
         .contains(&"native_now_playing".to_string())
     {
-        match get_os_specific_provider() {
-            Some(provider) => {
-                provider.register_thread(tx.clone(), token.clone());
-            }
-            None => {}
+        if let Some(provider) = get_os_specific_provider() {
+            provider.register_thread(tx.clone(), token.clone());
         }
     }
-    if settings.metadata_sources.contains(&"extension".to_string()) {
-        ExtensionProvider::default().register_thread(tx.clone(), token);
+    if settings.metadata_sources.contains(&WEB_EXTENSION_STRING.to_string()) {
+        ExtensionProvider.register_thread(tx.clone(), token);
     }
 }
 
@@ -97,6 +96,7 @@ async fn service(
     let timer = Instant::now();
     let mut ipc_client: DiscordIpcClient = DiscordIpcClient::new(DISCORD_ID);
     while !ipc_client.connect().is_ok() {
+        println!("{:?}", timer.elapsed());
         if timer.elapsed() > IPC_WAITING_TIMEOUT {
             return Err(anyhow!("Failed to find Discord IPC"));
         }
@@ -190,52 +190,45 @@ async fn app() -> anyhow::Result<()> {
         .init();
     let tracker = TaskTracker::new();
     let token = CancellationToken::new();
-    let data = Arc::new(RwLock::new(AppSettings::load_or_default()));
+    let settings = Arc::new(RwLock::new(AppSettings::load_or_default()));
 
-    let ui_lock = Arc::clone(&data);
-    let extension_lock = Arc::clone(&data);
-    let service_lock = Arc::clone(&data);
+    let ui_lock = Arc::clone(&settings);
+    let extension_lock = Arc::clone(&settings);
+    let service_lock = Arc::clone(&settings);
 
     let service_token = token.clone();
     let extension_token = token.clone();
     let ui_token = token.clone();
 
     let (mut tx, rx) = mpsc::channel(100);
-    init_providers(tx, service_lock, service_token).await;
 
     // ui can't be moved outside the main thread; there's probably a way to solve this.
     let _settings_reader = block_on(async { ui_lock.read().await });
     let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
-    let mut wind = Window::default().with_size(500, 200).center_screen();
-
-    let mut extension_enabled_textbox = CheckButton::default()
-        .with_label("Enable Extension Host")
-        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
-        .center_of_parent();
+    let mut wind = Window::default().with_size(400, 300).center_screen();
+    let mut flex = Flex::default()
+        .with_size(200, 250)
+        .center_of_parent()
+        .column();
+    let mut extension_enabled_textbox = CheckButton::default().with_label("Enable Extension Host");
     extension_enabled_textbox.set_callback(|_| {
         // handle this later
     });
+    extension_enabled_textbox.set_checked(settings.read().await.metadata_sources.contains(&WEB_EXTENSION_STRING.to_string()));
 
-    let mut save_button = Button::default()
-        .with_label("Save Changes")
-        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
-        .below_of(&extension_enabled_textbox, 10);
-    let service_status_label = TextDisplay::default()
-        .with_label("Service Status")
-        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
-        .below_of(&save_button, 3);
-
+    let mut save_button = Button::default().with_label("Save Changes");
     save_button.set_callback(|_| {
         let _ = restart_service();
     });
-    wind.add(&save_button);
-    wind.add(&extension_enabled_textbox);
-    wind.add(&service_status_label);
-    wind.end();
-    wind.show();
-    let _ = app.run();
+
+    let service_status_label = TextDisplay::default().with_label("Service Status");
+
+    flex.add(&save_button);
+    flex.add(&extension_enabled_textbox);
+    flex.add(&service_status_label);
+    flex.end();
     let (icon_rgba, icon_width, icon_height) = {
-        let image = image::open("path")
+        let image = image::open("assets/icon.png")
             .expect("Failed to open icon path")
             .into_rgba8();
         let (width, height) = image.dimensions();
@@ -243,7 +236,7 @@ async fn app() -> anyhow::Result<()> {
         (rgba, width, height)
     };
     let tray_icon = TrayIconBuilder::new()
-        .with_tooltip("system-tray - tray icon library!")
+        .with_tooltip("drp.rs - discord rich presence")
         .with_icon(Icon::from_rgba(icon_rgba, icon_width, icon_height)?)
         .build()?;
     if let Ok(event) = TrayIconEvent::receiver().try_recv() {
@@ -253,8 +246,12 @@ async fn app() -> anyhow::Result<()> {
     if let Ok(event) = MenuEvent::receiver().try_recv() {
         println!("menu event: {:?}", event);
     } // end ui section here
-      // tracker.spawn(async { ui(ui_lock, ui_token).await });
+    tracker.spawn(init_providers(tx, service_lock, service_token));
+    // tracker.spawn(async || init_providers(tx, service_lock, service_token).await);
     tracker.spawn(async { service(extension_lock, extension_token, rx).await });
+    wind.end();
+    wind.show();
+    let _ = app.run();
 
     tracker.close();
     tracker.wait().await;
