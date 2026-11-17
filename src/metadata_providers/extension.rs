@@ -21,7 +21,7 @@ pub struct ExtensionProvider;
 pub struct RegisterActivityBody {
     subprovider_name: String,
     title: String,
-    artist: String,
+    artist: Option<String>,
     media_type: MediaType
 
 }
@@ -30,7 +30,7 @@ pub struct AppState(Sender<Metadata>);
 pub async fn register_activity(State(state): State<AppState>, Json(body): Json<RegisterActivityBody>) {
     // figure things out later here;
     let _ = state.0.send(Metadata { title: body.title
-        , aux_title: None, progress: None, state: Some(super::PlaybackState::PAUSED), provider_name: "Web Extension".to_string(), subprovider_name: Some(body.subprovider_name), media_type: super::MediaType::MIXED, metadata_media: None }).await;
+        , aux_title: body.artist, progress: None, state: Some(super::PlaybackState::PLAYING), provider_name: "Web Extension".to_string(), subprovider_name: Some(body.subprovider_name), media_type: body.media_type, metadata_media: None }).await;
 }
 pub async fn heartbeat() -> &'static str {
     "drp.rs"

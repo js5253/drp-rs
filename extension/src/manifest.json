@@ -26,17 +26,11 @@
     "tabs"
   ],
   "host_permissions": [
-    "https://localhost*"
+    "*"
   ],
   "firefox:permissions": [
     "tabs"
   ],
-  "background": {
-    "chromium:service_worker": "background.ts",
-    "firefox:scripts": [
-      "background.ts"
-    ]
-  },
   "content_scripts": [
     {
       "matches": [

@@ -1,10 +1,3 @@
-(async () => {
-  const tabs = await chrome.tabs.query({
-    currentWindow: true
-  });
-  console.log(tabs)
-})
-
 // console.log(
 //   '[From the background context] Hello from the background worker/script!'
 // )

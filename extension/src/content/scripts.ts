@@ -21,35 +21,50 @@ async function determineIfDrpRunning() {
   return drpDetected;
 
 }
+interface ExtensionMetadata {
+  title: string;
+  artist?: string;
+  media_type: "music" | "video" | "media";
+  subprovider_name: string;
+}
+async function handleYTM(): Promise<ExtensionMetadata> {
+  const titleElement = document.querySelector('ytmusic-player-bar yt-formatted-string.title')
+  const posterElement = document.querySelector('ytmusic-player-bar yt-formatted-string.byline')?.children[0]
+  console.log(titleElement, posterElement)
+
+  if (!titleElement || !posterElement) throw new Error("Could not get title or artist info.");
+  console.log(titleElement.textContent, posterElement.textContent)
+
+  return {
+    title: titleElement.textContent,
+    artist: posterElement.textContent,
+    media_type: "music",
+    subprovider_name: "YouTube Music"
+  }
+
+}
 export default function initial() {
   setInterval(async () => {
     determineIfDrpRunning()
-    const titleElement = document.querySelector('ytmusic-player-bar yt-formatted-string.title')
-    const posterElement = document.querySelector('ytmusic-player-bar yt-formatted-string.byline')?.children[0]
-    console.log(titleElement, posterElement)
+    const isYTMusic = window.location.href.includes('music.youtube');
 
-    if (!titleElement || !posterElement) return;
+    if (!isYTMusic) return;
     if (drpDetected) {
       try {
+        const details = await handleYTM();
         const item = await fetch(BASE_URL + "/", {
           method: "POST",
-          body: JSON.stringify({
-            subprovider_name: "YouTube Music",
-            title: titleElement.textContent,
-            artist: posterElement.textContent,
-            media_type: "music"
-          })
+          body: JSON.stringify(details)
         });
         const res = await item.json();
-
-      } finally {
-        console.log(titleElement, posterElement)
+        console.log(res);
+      } catch(e) {
+        console.log("[DRP.RS] error: ", e);
       }
 
 
     }
 
-    console.log(titleElement.textContent, posterElement.textContent)
   }, 3000)
   const rootDiv = document.createElement('div')
   rootDiv.setAttribute('data-extension-root', 'true')
