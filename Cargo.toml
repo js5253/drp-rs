@@ -2,7 +2,7 @@
 name = "drp"
 version = "0.1.0"
 edition = "2021"
-
+repository = "https://github.com/js5253/drp-rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -23,7 +23,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 dotenvy = "0.15.7"
 tracing = "0.1.44"
 tower = "0.5.3"
-tower-http = { version = "0.7.1", features = ["trace"] }
+tower-http = { version = "0.7.1", features = ["cors", "trace"] }
 dotenvy_macro = "0.15.7"
 image = "0.25.10"
 tokio-util = { version = "0.7.20", features = ["rt"] }
@@ -41,6 +41,11 @@ windows = { version = "0.62.2", features = ["Media_Control", "Foundation", "Foun
 [profile.release]
 strip = "symbols"
 opt-level="z"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
 
 [lints.clippy]
 panic = "warn"

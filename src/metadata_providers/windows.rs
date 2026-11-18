@@ -1,6 +1,4 @@
 use super::MetadataProvider;
-use crate::settings::AppSettings;
-use futures::executor;
 
 enum PlaybackType {
     UNKNOWN,
@@ -12,9 +10,11 @@ enum PlaybackType {
 pub struct WindowsParser {}
 #[cfg(not(target_os = "windows"))]
 impl MetadataProvider for WindowsParser {
-
-    fn register_thread(&self, tx: tokio::sync::mpsc::Sender<super::Metadata>, token: tokio_util::sync::CancellationToken) {
-        
+    fn register_thread(
+        &self,
+        _tx: tokio::sync::mpsc::Sender<super::Metadata>,
+        _token: tokio_util::sync::CancellationToken,
+    ) {
     }
 }
 

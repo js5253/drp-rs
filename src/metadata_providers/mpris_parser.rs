@@ -1,16 +1,14 @@
 #[cfg(target_os = "linux")]
-use std::{ops::Deref, pin::Pin, time::Duration};
+use std::time::Duration;
 
 use crate::metadata_providers::MediaType;
 
 #[cfg(not(target_os = "linux"))]
 use crate::metadata_providers::Metadata;
 #[cfg(target_os = "linux")]
-use crate::metadata_providers::{Metadata, PlaybackState};
-use crate::{metadata_providers::MetadataProvider, settings::AppSettings};
+use crate::metadata_providers::Metadata;
+use crate::metadata_providers::MetadataProvider;
 
-use anyhow::Error;
-use mpris::FindingError::{self, NoPlayerFound};
 #[cfg(target_os = "linux")]
 use mpris::{self, PlayerFinder};
 use serde::Deserialize;
@@ -64,29 +62,25 @@ impl MprisParser {
             player = finder.find_active();
             sleep(Duration::from_millis(500)).await;
         }
-        let Ok(player) = player else {return Ok(())};
+        let Ok(player) = player else { return Ok(()) };
 
         loop {
             if token.is_cancelled() {
-                return Ok(())
+                return Ok(());
             }
             let status = player.get_playback_status().ok();
             let progress = player.get_position().ok().filter(|pred| !pred.is_zero());
-            let Ok(binding) = player.get_metadata() else {continue};
+            let Ok(binding) = player.get_metadata() else {
+                continue;
+            };
             let metadata = binding.as_hashmap();
             let media_type: MediaType = {
-                    if process_types
-                    .music
-                    .contains(&player.identity().to_string())
-                {
-                    MediaType::AUDIO
-                } else if process_types
-                    .video
-                    .contains(&player.identity().to_string())
-                {
-                    MediaType::VIDEO
+                if process_types.music.contains(&player.identity().to_string()) {
+                    MediaType::Audio
+                } else if process_types.video.contains(&player.identity().to_string()) {
+                    MediaType::Video
                 } else {
-                    MediaType::MIXED
+                    MediaType::Mixed
                 }
             };
             let title = metadata
@@ -101,30 +95,32 @@ impl MprisParser {
                 .and_then(|aux_title| aux_title.as_string())
                 .filter(|pred| !pred.is_empty());
             let photo_url = metadata.get("mpris:artUrl").and_then(|url| url.as_string());
-            let Some(title) = title else {continue};
+            let Some(title) = title else { continue };
             let formatted_title = match artist {
                 None => title.clone(),
                 Some(artist) => format!("{} - {}", title, artist),
             };
-            let _ = tx.send(Metadata {
-                title: formatted_title.to_owned(),
-                aux_title: aux_title.cloned(),
-                progress,
-                state: status.map(|status| status.into()),
-                provider_name: String::from("MPRIS provider"),
-                subprovider_name: Some(player.identity().to_string()),
-                media_type,
-                metadata_media: photo_url.cloned(),
-            }).await;
+            let _ = tx
+                .send(Metadata {
+                    title: formatted_title.to_owned(),
+                    aux_title: aux_title.cloned(),
+                    progress,
+                    state: status.map(|status| status.into()),
+                    provider_name: String::from("MPRIS provider"),
+                    subprovider_name: Some(player.identity().to_string()),
+                    media_type,
+                    metadata_media: photo_url.cloned(),
+                })
+                .await;
         }
     }
 }
 
 #[cfg(target_os = "linux")]
 impl MetadataProvider for MprisParser {
-    fn register_thread(&self, tx: mpsc::Sender<Metadata>, token: CancellationToken) {
-        let process_types = self.process_types.clone();
-        // tokio::spawn(async move { 
+    fn register_thread(&self, _tx: mpsc::Sender<Metadata>, _token: CancellationToken) {
+        let _process_types = self.process_types.clone();
+        // tokio::spawn(async move {
         //     let _ = Self::thread(process_types, tx, token).await;
         // });
     }

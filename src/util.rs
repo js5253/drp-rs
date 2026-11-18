@@ -1,13 +1,11 @@
 use std::time::Duration;
 
-use discord_rich_presence::activity::ActivityType;
-
 use crate::metadata_providers::MediaType;
-pub fn get_action_string(activity_type: &MediaType, subtitle: String) -> String {
+pub fn get_action_string(activity_type: &MediaType, subtitle: &str) -> String {
     match activity_type {
-        MediaType::AUDIO => format!("Listening to {}", subtitle),
-        MediaType::VIDEO => todo!("Watching {}", subtitle),
-        _ => subtitle.clone(),
+        MediaType::Audio => format!("Listening to {}", subtitle),
+        MediaType::Video => todo!("Watching {}", subtitle),
+        _ => subtitle.to_string(),
     }
 }
 

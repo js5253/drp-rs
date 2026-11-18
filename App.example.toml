@@ -1,7 +1,3 @@
 discord_username = "gamer"
-metadata_sources = ["extension", "tautulli", "native_now_playing"]
-
-[tautulli]
-tautulli_server_url = "http://server1.example.com"
-tautulli_server_cookie = "" # enter your cookie here after logging into tautulli
+metadata_sources = ["extension", "native_now_playing"]
 

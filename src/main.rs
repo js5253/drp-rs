@@ -1,4 +1,6 @@
 #![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+
 mod metadata_providers;
 mod settings;
 mod util;
@@ -7,26 +9,25 @@ use discord_rich_presence::{
     activity::{Activity, ActivityType, Assets},
     DiscordIpc, DiscordIpcClient,
 };
-use dotenvy::dotenv;
 use fltk::{
     app::{self},
     button::{Button, CheckButton},
+    group::Flex,
     prelude::*,
     text::TextDisplay,
     window::Window,
 };
 use futures::executor::block_on;
-use image::ImageReader;
 use settings::AppSettings;
+use std::sync::Arc;
 use std::{
-    process::Command,
+    env,
+    process::{self, Command},
     time::{Duration, Instant},
 };
-use std::{sync::Arc, thread};
 use tokio::{
     signal,
     sync::{mpsc, RwLock},
-    task::spawn_blocking,
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing_subscriber::EnvFilter;
@@ -41,8 +42,6 @@ use crate::{
     util::get_action_string,
 };
 const DELAY_TO_RECHECK: u64 = 3;
-const UI_DEFAULT_WIDTH: i32 = 300;
-const UI_DEFAULT_HEIGHT: i32 = 30;
 const IPC_WAITING_TIMEOUT: Duration = Duration::from_secs(60);
 
 const LISTENING_ICON_URL: &str = "https://raw.githubusercontent.com/js5253/drp-rs/refs/heads/main/assets/CD.svg?token=GHSAT0AAAAAAEE36YXNCUT4XT5CS7BPZVE62UB6J5Q";
@@ -51,12 +50,17 @@ const PLAYING_ICON_URL: &str = "https://raw.githubusercontent.com/js5253/drp-rs/
 
 const DISCORD_ID: &str = env!("DISCORD_ID");
 
-fn restart_service() -> Result<(), anyhow::Error> {
-    let path = std::env::current_dir()?;
-    Command::new(path);
-    std::process::exit(0);
-}
+const NOW_PLAYING_STRING: &str = "native_now_playing";
+const WEB_EXTENSION_STRING: &str = "extension";
 
+fn restart_service() -> Result<(), anyhow::Error> {
+    let exec = env::current_exe()?;
+    let args: Vec<String> = env::args().skip(1).collect();
+
+    Command::new(exec).args(args).spawn()?;
+
+    process::exit(0);
+}
 fn get_os_specific_provider() -> Option<Box<dyn MetadataProvider + Send>> {
     // in the meantime, use only the first metadata provider.
     if cfg!(target_os = "linux") {
@@ -71,32 +75,36 @@ async fn init_providers(
     tx: mpsc::Sender<Metadata>,
     settings: Arc<RwLock<AppSettings>>,
     token: CancellationToken,
+    mut extension_cancellation_token: Option<CancellationToken>,
 ) {
     let settings = settings.read().await;
     if settings
         .metadata_sources
-        .contains(&"native_now_playing".to_string())
+        .contains(&NOW_PLAYING_STRING.to_string())
     {
-        match get_os_specific_provider() {
-            Some(provider) => {
-                provider.register_thread(tx.clone(), token.clone());
-            }
-            None => {}
+        if let Some(provider) = get_os_specific_provider() {
+            provider.register_thread(tx.clone(), token.clone());
         }
     }
-    if settings.metadata_sources.contains(&"extension".to_string()) {
-        ExtensionProvider::default().register_thread(tx.clone(), token);
+    if settings
+        .metadata_sources
+        .contains(&WEB_EXTENSION_STRING.to_string())
+    {
+        ExtensionProvider.register_thread(tx.clone(), token);
+
+        extension_cancellation_token = Some(CancellationToken::new())
     }
 }
 
 async fn service(
-    settings: Arc<RwLock<AppSettings>>,
+    _settings: Arc<RwLock<AppSettings>>,
     token: CancellationToken,
     mut rx: mpsc::Receiver<Metadata>,
 ) -> anyhow::Result<()> {
     let timer = Instant::now();
-    let mut ipc_client: DiscordIpcClient = DiscordIpcClient::new(DISCORD_ID);
+    let mut ipc_client = DiscordIpcClient::new(DISCORD_ID);
     while !ipc_client.connect().is_ok() {
+        println!("{:?}", timer.elapsed());
         if timer.elapsed() > IPC_WAITING_TIMEOUT {
             return Err(anyhow!("Failed to find Discord IPC"));
         }
@@ -118,9 +126,9 @@ async fn service(
         }
 
         let (activity_type, default_image) = match playing_metadata.media_type {
-            MediaType::AUDIO => (ActivityType::Listening, String::from(LISTENING_ICON_URL)), // replace these with GitHub hosted images maybe?
-            MediaType::VIDEO => (ActivityType::Watching, String::from(WATCHING_ICON_URL)),
-            MediaType::MIXED => (ActivityType::Playing, String::from(PLAYING_ICON_URL)),
+            MediaType::Audio => (ActivityType::Listening, String::from(LISTENING_ICON_URL)), // replace these with GitHub hosted images maybe?
+            MediaType::Video => (ActivityType::Watching, String::from(WATCHING_ICON_URL)),
+            MediaType::Mixed => (ActivityType::Playing, String::from(PLAYING_ICON_URL)),
         };
 
         let _activity = ipc_client.set_activity(
@@ -128,7 +136,7 @@ async fn service(
                 .activity_type(activity_type)
                 .name(get_action_string(
                     &playing_metadata.media_type,
-                    playing_metadata.title.clone(),
+                    &playing_metadata.title.to_string(),
                 ))
                 .assets(
                     Assets::new()
@@ -170,6 +178,7 @@ async fn service(
 }
 
 fn main() {
+    #[allow(clippy::expect_used)]
     let _unused = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .name("my-runtime")
@@ -182,68 +191,76 @@ async fn app() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         // This allows you to use, e.g., `RUST_LOG=info` or `RUST_LOG=debug`
         // when running the app to set log levels.
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .or_else(|_| EnvFilter::try_new("drp-rs=error,tower_http=warn"))
-                .expect("Failed to set up logging"),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().or_else(|_| EnvFilter::try_new(""))?)
         .init();
     let tracker = TaskTracker::new();
+    let extension_enabled_token: Option<CancellationToken> = None;
+    let ext: Option<CancellationToken> = extension_enabled_token.clone();
     let token = CancellationToken::new();
-    let data = Arc::new(RwLock::new(AppSettings::load_or_default()));
+    let settings = Arc::new(RwLock::new(AppSettings::load_or_default()));
 
-    let ui_lock = Arc::clone(&data);
-    let extension_lock = Arc::clone(&data);
-    let service_lock = Arc::clone(&data);
+    let ui_lock = Arc::clone(&settings);
+    let extension_lock = Arc::clone(&settings);
+    let service_lock = Arc::clone(&settings);
 
     let service_token = token.clone();
     let extension_token = token.clone();
-    let ui_token = token.clone();
+    let _ui_token = token.clone();
 
-    let (mut tx, rx) = mpsc::channel(100);
-    init_providers(tx, service_lock, service_token).await;
+    let (tx, rx) = mpsc::channel(20);
 
     // ui can't be moved outside the main thread; there's probably a way to solve this.
     let _settings_reader = block_on(async { ui_lock.read().await });
     let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
-    let mut wind = Window::default().with_size(500, 200).center_screen();
+    let mut wind = Window::default().with_size(400, 300).center_screen();
+    let mut flex = Flex::default()
+        .with_size(200, 250)
+        .center_of_parent()
+        .column();
+    let mut extension_enabled_checkbox = CheckButton::default().with_label("Enable Extension Host");
+    extension_enabled_checkbox.set_checked(
+        settings
+            .read()
+            .await
+            .metadata_sources
+            .contains(&WEB_EXTENSION_STRING.to_string()),
+    );
 
-    let mut extension_enabled_textbox = CheckButton::default()
-        .with_label("Enable Extension Host")
-        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
-        .center_of_parent();
-    extension_enabled_textbox.set_callback(|_| {
-        // handle this later
+    extension_enabled_checkbox.set_callback(move |value| {
+        if value.is_checked() {
+            if let Some(token) = &extension_enabled_token {
+                token.cancel();
+            }
+        } else {
+        }
     });
+    extension_enabled_checkbox.set_checked(
+        settings
+            .read()
+            .await
+            .metadata_sources
+            .contains(&WEB_EXTENSION_STRING.to_string()),
+    );
 
-    let mut save_button = Button::default()
-        .with_label("Save Changes")
-        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
-        .below_of(&extension_enabled_textbox, 10);
-    let service_status_label = TextDisplay::default()
-        .with_label("Service Status")
-        .with_size(UI_DEFAULT_WIDTH, UI_DEFAULT_HEIGHT)
-        .below_of(&save_button, 3);
-
+    let mut save_button = Button::default().with_label("Save Changes");
     save_button.set_callback(|_| {
         let _ = restart_service();
     });
-    wind.add(&save_button);
-    wind.add(&extension_enabled_textbox);
-    wind.add(&service_status_label);
-    wind.end();
-    wind.show();
-    let _ = app.run();
+
+    let service_status_label = TextDisplay::default().with_label("Service Status");
+
+    flex.add(&save_button);
+    flex.add(&extension_enabled_checkbox);
+    flex.add(&service_status_label);
+    flex.end();
     let (icon_rgba, icon_width, icon_height) = {
-        let image = image::open("path")
-            .expect("Failed to open icon path")
-            .into_rgba8();
+        let image = image::open("assets/icon.png")?.into_rgba8();
         let (width, height) = image.dimensions();
         let rgba = image.into_raw();
         (rgba, width, height)
     };
-    let tray_icon = TrayIconBuilder::new()
-        .with_tooltip("system-tray - tray icon library!")
+    let _tray_icon = TrayIconBuilder::new()
+        .with_tooltip("drp.rs - discord rich presence")
         .with_icon(Icon::from_rgba(icon_rgba, icon_width, icon_height)?)
         .build()?;
     if let Ok(event) = TrayIconEvent::receiver().try_recv() {
@@ -253,8 +270,12 @@ async fn app() -> anyhow::Result<()> {
     if let Ok(event) = MenuEvent::receiver().try_recv() {
         println!("menu event: {:?}", event);
     } // end ui section here
-      // tracker.spawn(async { ui(ui_lock, ui_token).await });
+    tracker.spawn(init_providers(tx, service_lock, service_token, ext));
+    // tracker.spawn(async || init_providers(tx, service_lock, service_token).await);
     tracker.spawn(async { service(extension_lock, extension_token, rx).await });
+    wind.end();
+    wind.show();
+    let _ = app.run();
 
     tracker.close();
     tracker.wait().await;
@@ -262,7 +283,7 @@ async fn app() -> anyhow::Result<()> {
         Ok(()) => {
             token.cancel();
         }
-        Err(err) => {}
+        Err(_err) => {}
     }
     Ok(())
 }

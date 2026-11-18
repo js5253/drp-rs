@@ -1,7 +1,9 @@
 use std::{fmt, time::Duration};
 
+use anyhow::anyhow;
 #[cfg(target_os = "linux")]
 use mpris::PlaybackStatus;
+use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 // use windows::Media::{MediaPlaybackType, Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus};
@@ -9,8 +11,6 @@ use tokio_util::sync::CancellationToken;
 use ::windows::Media::{
     Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus, MediaPlaybackType,
 };
-
-use crate::settings::AppSettings;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PlaybackState {
@@ -51,11 +51,11 @@ impl From<PlaybackStatus> for PlaybackState {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Deserialize)]
 pub enum MediaType {
-    AUDIO,
-    VIDEO,
-    MIXED,
+    Audio,
+    Video,
+    Mixed,
 }
 #[cfg(target_os = "windows")]
 impl From<MediaPlaybackType> for MediaType {
@@ -64,6 +64,18 @@ impl From<MediaPlaybackType> for MediaType {
             MediaPlaybackType(1) => MediaType::VIDEO,
             MediaPlaybackType(2) => MediaType::AUDIO,
             _ => MediaType::MIXED,
+        }
+    }
+}
+impl TryFrom<&str> for MediaType {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "audio" => Ok(MediaType::Audio),
+            "video" => Ok(MediaType::Video),
+            "mixed" => Ok(MediaType::Mixed),
+            _ => Err(anyhow!("")),
         }
     }
 }
