@@ -1,4 +1,6 @@
 #![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+
 mod metadata_providers;
 mod settings;
 mod util;
@@ -7,7 +9,6 @@ use discord_rich_presence::{
     activity::{Activity, ActivityType, Assets},
     DiscordIpc, DiscordIpcClient,
 };
-use dotenvy::dotenv;
 use fltk::{
     app::{self},
     button::{Button, CheckButton},
@@ -17,19 +18,16 @@ use fltk::{
     window::Window,
 };
 use futures::executor::block_on;
-use image::ImageReader;
 use settings::AppSettings;
+use std::sync::Arc;
 use std::{
     env,
-    os::unix::process::CommandExt,
     process::{self, Command},
     time::{Duration, Instant},
 };
-use std::{sync::Arc, thread};
 use tokio::{
     signal,
     sync::{mpsc, RwLock},
-    task::spawn_blocking,
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing_subscriber::EnvFilter;
@@ -40,7 +38,8 @@ use util::pretty_time;
 use metadata_providers::{mpris_parser::MprisParser, windows::WindowsParser, MetadataProvider};
 
 use crate::{
-    metadata_providers::{MediaType, Metadata, extension::{ExtensionProvider, WEB_EXTENSION_STRING}}, util::get_action_string,
+    metadata_providers::{extension::ExtensionProvider, MediaType, Metadata},
+    util::get_action_string,
 };
 const DELAY_TO_RECHECK: u64 = 3;
 const IPC_WAITING_TIMEOUT: Duration = Duration::from_secs(60);
@@ -50,6 +49,9 @@ const WATCHING_ICON_URL: &str = "https://raw.githubusercontent.com/js5253/drp-rs
 const PLAYING_ICON_URL: &str = "https://raw.githubusercontent.com/js5253/drp-rs/refs/heads/main/assets/Media.svg?token=GHSAT0AAAAAAEE36YXNRCMTOTAZ2P3V46TQ2UB6MGQ";
 
 const DISCORD_ID: &str = env!("DISCORD_ID");
+
+const NOW_PLAYING_STRING: &str = "native_now_playing";
+const WEB_EXTENSION_STRING: &str = "extension";
 
 fn restart_service() -> Result<(), anyhow::Error> {
     let exec = env::current_exe()?;
@@ -73,28 +75,34 @@ async fn init_providers(
     tx: mpsc::Sender<Metadata>,
     settings: Arc<RwLock<AppSettings>>,
     token: CancellationToken,
+    mut extension_cancellation_token: Option<CancellationToken>,
 ) {
     let settings = settings.read().await;
     if settings
         .metadata_sources
-        .contains(&"native_now_playing".to_string())
+        .contains(&NOW_PLAYING_STRING.to_string())
     {
         if let Some(provider) = get_os_specific_provider() {
             provider.register_thread(tx.clone(), token.clone());
         }
     }
-    if settings.metadata_sources.contains(&WEB_EXTENSION_STRING.to_string()) {
+    if settings
+        .metadata_sources
+        .contains(&WEB_EXTENSION_STRING.to_string())
+    {
         ExtensionProvider.register_thread(tx.clone(), token);
+
+        extension_cancellation_token = Some(CancellationToken::new())
     }
 }
 
 async fn service(
-    settings: Arc<RwLock<AppSettings>>,
+    _settings: Arc<RwLock<AppSettings>>,
     token: CancellationToken,
     mut rx: mpsc::Receiver<Metadata>,
 ) -> anyhow::Result<()> {
     let timer = Instant::now();
-    let mut ipc_client: DiscordIpcClient = DiscordIpcClient::new(DISCORD_ID);
+    let mut ipc_client = DiscordIpcClient::new(DISCORD_ID);
     while !ipc_client.connect().is_ok() {
         println!("{:?}", timer.elapsed());
         if timer.elapsed() > IPC_WAITING_TIMEOUT {
@@ -118,9 +126,9 @@ async fn service(
         }
 
         let (activity_type, default_image) = match playing_metadata.media_type {
-            MediaType::AUDIO => (ActivityType::Listening, String::from(LISTENING_ICON_URL)), // replace these with GitHub hosted images maybe?
-            MediaType::VIDEO => (ActivityType::Watching, String::from(WATCHING_ICON_URL)),
-            MediaType::MIXED => (ActivityType::Playing, String::from(PLAYING_ICON_URL)),
+            MediaType::Audio => (ActivityType::Listening, String::from(LISTENING_ICON_URL)), // replace these with GitHub hosted images maybe?
+            MediaType::Video => (ActivityType::Watching, String::from(WATCHING_ICON_URL)),
+            MediaType::Mixed => (ActivityType::Playing, String::from(PLAYING_ICON_URL)),
         };
 
         let _activity = ipc_client.set_activity(
@@ -128,7 +136,7 @@ async fn service(
                 .activity_type(activity_type)
                 .name(get_action_string(
                     &playing_metadata.media_type,
-                    playing_metadata.title.clone(),
+                    &playing_metadata.title.to_string(),
                 ))
                 .assets(
                     Assets::new()
@@ -170,6 +178,7 @@ async fn service(
 }
 
 fn main() {
+    #[allow(clippy::expect_used)]
     let _unused = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .name("my-runtime")
@@ -182,13 +191,11 @@ async fn app() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         // This allows you to use, e.g., `RUST_LOG=info` or `RUST_LOG=debug`
         // when running the app to set log levels.
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .or_else(|_| EnvFilter::try_new("drp-rs=error,tower_http=warn"))
-                .expect("Failed to set up logging"),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().or_else(|_| EnvFilter::try_new(""))?)
         .init();
     let tracker = TaskTracker::new();
+    let extension_enabled_token: Option<CancellationToken> = None;
+    let ext: Option<CancellationToken> = extension_enabled_token.clone();
     let token = CancellationToken::new();
     let settings = Arc::new(RwLock::new(AppSettings::load_or_default()));
 
@@ -198,9 +205,9 @@ async fn app() -> anyhow::Result<()> {
 
     let service_token = token.clone();
     let extension_token = token.clone();
-    let ui_token = token.clone();
+    let _ui_token = token.clone();
 
-    let (mut tx, rx) = mpsc::channel(100);
+    let (tx, rx) = mpsc::channel(20);
 
     // ui can't be moved outside the main thread; there's probably a way to solve this.
     let _settings_reader = block_on(async { ui_lock.read().await });
@@ -210,11 +217,30 @@ async fn app() -> anyhow::Result<()> {
         .with_size(200, 250)
         .center_of_parent()
         .column();
-    let mut extension_enabled_textbox = CheckButton::default().with_label("Enable Extension Host");
-    extension_enabled_textbox.set_callback(|_| {
-        // handle this later
+    let mut extension_enabled_checkbox = CheckButton::default().with_label("Enable Extension Host");
+    extension_enabled_checkbox.set_checked(
+        settings
+            .read()
+            .await
+            .metadata_sources
+            .contains(&WEB_EXTENSION_STRING.to_string()),
+    );
+
+    extension_enabled_checkbox.set_callback(move |value| {
+        if value.is_checked() {
+            if let Some(token) = &extension_enabled_token {
+                token.cancel();
+            }
+        } else {
+        }
     });
-    extension_enabled_textbox.set_checked(settings.read().await.metadata_sources.contains(&WEB_EXTENSION_STRING.to_string()));
+    extension_enabled_checkbox.set_checked(
+        settings
+            .read()
+            .await
+            .metadata_sources
+            .contains(&WEB_EXTENSION_STRING.to_string()),
+    );
 
     let mut save_button = Button::default().with_label("Save Changes");
     save_button.set_callback(|_| {
@@ -224,18 +250,16 @@ async fn app() -> anyhow::Result<()> {
     let service_status_label = TextDisplay::default().with_label("Service Status");
 
     flex.add(&save_button);
-    flex.add(&extension_enabled_textbox);
+    flex.add(&extension_enabled_checkbox);
     flex.add(&service_status_label);
     flex.end();
     let (icon_rgba, icon_width, icon_height) = {
-        let image = image::open("assets/icon.png")
-            .expect("Failed to open icon path")
-            .into_rgba8();
+        let image = image::open("assets/icon.png")?.into_rgba8();
         let (width, height) = image.dimensions();
         let rgba = image.into_raw();
         (rgba, width, height)
     };
-    let tray_icon = TrayIconBuilder::new()
+    let _tray_icon = TrayIconBuilder::new()
         .with_tooltip("drp.rs - discord rich presence")
         .with_icon(Icon::from_rgba(icon_rgba, icon_width, icon_height)?)
         .build()?;
@@ -246,7 +270,7 @@ async fn app() -> anyhow::Result<()> {
     if let Ok(event) = MenuEvent::receiver().try_recv() {
         println!("menu event: {:?}", event);
     } // end ui section here
-    tracker.spawn(init_providers(tx, service_lock, service_token));
+    tracker.spawn(init_providers(tx, service_lock, service_token, ext));
     // tracker.spawn(async || init_providers(tx, service_lock, service_token).await);
     tracker.spawn(async { service(extension_lock, extension_token, rx).await });
     wind.end();
@@ -259,7 +283,7 @@ async fn app() -> anyhow::Result<()> {
         Ok(()) => {
             token.cancel();
         }
-        Err(err) => {}
+        Err(_err) => {}
     }
     Ok(())
 }

@@ -12,8 +12,6 @@ use ::windows::Media::{
     Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus, MediaPlaybackType,
 };
 
-use crate::settings::AppSettings;
-
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PlaybackState {
     PLAYING,
@@ -55,9 +53,9 @@ impl From<PlaybackStatus> for PlaybackState {
 
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize)]
 pub enum MediaType {
-    AUDIO,
-    VIDEO,
-    MIXED,
+    Audio,
+    Video,
+    Mixed,
 }
 #[cfg(target_os = "windows")]
 impl From<MediaPlaybackType> for MediaType {
@@ -74,10 +72,10 @@ impl TryFrom<&str> for MediaType {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "audio" => Ok(MediaType::AUDIO),
-            "video" => Ok(MediaType::VIDEO),
-            "mixed" => Ok(MediaType::MIXED),
-            _ => Err(anyhow!(""))
+            "audio" => Ok(MediaType::Audio),
+            "video" => Ok(MediaType::Video),
+            "mixed" => Ok(MediaType::Mixed),
+            _ => Err(anyhow!("")),
         }
     }
 }

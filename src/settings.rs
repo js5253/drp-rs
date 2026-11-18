@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
 use tracing::instrument;
 
+use crate::{NOW_PLAYING_STRING, WEB_EXTENSION_STRING};
+
 #[derive(Deserialize, Debug, Serialize, Clone)]
 pub struct AppSettings {
     pub discord_username: Option<String>,
@@ -15,14 +17,20 @@ impl AppSettings {
     pub fn load_or_default() -> AppSettings {
         let path = Path::new("config/config.toml");
         if fs::exists("config/config.toml").is_ok() {
-            let config: AppSettings = fs::read_to_string(path).map(|config| toml::from_str(&config).map_err(|_| anyhow!("Failed to decode config file")))
+            let config: AppSettings = fs::read_to_string(path)
+                .map(|config| {
+                    toml::from_str(&config).map_err(|_| anyhow!("Failed to decode config file"))
+                })
                 .map_err(|_| anyhow!("Invalid settings file"))
                 .flatten()
                 .unwrap_or(AppSettings {
                     discord_username: None,
                     tautulli_server_url: None,
                     tautulli_server_cookie: None,
-                    metadata_sources: vec!["native_now_playing".to_string()],
+                    metadata_sources: vec![
+                        NOW_PLAYING_STRING.to_string(),
+                        WEB_EXTENSION_STRING.to_string(),
+                    ],
                 });
 
             config
@@ -31,9 +39,14 @@ impl AppSettings {
                 discord_username: None,
                 tautulli_server_url: None,
                 tautulli_server_cookie: None,
-                metadata_sources: vec!["native_now_playing".to_string()],
+                metadata_sources: vec![
+                    NOW_PLAYING_STRING.to_string(),
+                    WEB_EXTENSION_STRING.to_string(),
+                ],
             };
-            let _ = toml::to_string(&config).map_err(|_| anyhow!("")).and_then(|config| fs::write(path, config).map_err(|_| anyhow!("B")));
+            let _ = toml::to_string(&config)
+                .map_err(|_| anyhow!(""))
+                .and_then(|config| fs::write(path, config).map_err(|_| anyhow!("B")));
 
             config
         }
