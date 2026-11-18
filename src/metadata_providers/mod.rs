@@ -14,18 +14,18 @@ use ::windows::Media::{
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PlaybackState {
-    PLAYING,
-    PAUSED,
-    STOPPED,
-    UNKNOWN,
+    Playing,
+    Paused,
+    Stopped,
+    Unknown,
 }
 impl fmt::Display for PlaybackState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PlaybackState::PLAYING => write!(f, "Playing"),
-            PlaybackState::PAUSED => write!(f, "Paused"),
-            PlaybackState::STOPPED => write!(f, "Stopped"),
-            PlaybackState::UNKNOWN => write!(f, ""),
+            PlaybackState::Playing => write!(f, "Playing"),
+            PlaybackState::Paused => write!(f, "Paused"),
+            PlaybackState::Stopped => write!(f, "Stopped"),
+            PlaybackState::Unknown=> write!(f, ""),
         }
     }
 }
@@ -44,9 +44,9 @@ impl From<GlobalSystemMediaTransportControlsSessionPlaybackStatus> for PlaybackS
 impl From<PlaybackStatus> for PlaybackState {
     fn from(value: PlaybackStatus) -> Self {
         match value {
-            PlaybackStatus::Playing => PlaybackState::PLAYING,
-            PlaybackStatus::Paused => PlaybackState::PAUSED,
-            PlaybackStatus::Stopped => PlaybackState::STOPPED,
+            PlaybackStatus::Playing => PlaybackState::Playing,
+            PlaybackStatus::Paused => PlaybackState::Paused,
+            PlaybackStatus::Stopped => PlaybackState::Stopped,
         }
     }
 }

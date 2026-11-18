@@ -21,6 +21,8 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 #[cfg(not(target_os = "linux"))]
 use tokio_util::sync::CancellationToken;
+#[cfg(target_os = "linux")]
+use tracing::info;
 
 #[derive(Deserialize, Clone)]
 struct ProcessTypes {
@@ -50,11 +52,13 @@ impl MprisParser {
     }
 }
 impl MprisParser {
-    async fn thread(
+}
+    async fn register_activity(
         process_types: ProcessTypes,
         tx: mpsc::Sender<Metadata>,
         token: CancellationToken,
     ) -> anyhow::Result<()> {
+        info!("Created MPRIS Parser Thread");
         let finder = PlayerFinder::new()?;
         let mut player = finder.find_active();
 
@@ -114,14 +118,11 @@ impl MprisParser {
                 .await;
         }
     }
-}
 
 #[cfg(target_os = "linux")]
 impl MetadataProvider for MprisParser {
-    fn register_thread(&self, _tx: mpsc::Sender<Metadata>, _token: CancellationToken) {
-        let _process_types = self.process_types.clone();
-        // tokio::spawn(async move {
-        //     let _ = Self::thread(process_types, tx, token).await;
-        // });
-    }
+    fn register_thread(&self, tx: mpsc::Sender<Metadata>, token: CancellationToken) {
+        let process_types = self.process_types.clone();
+        tokio::task::spawn_local(async {register_activity(process_types, tx, token).await});
+}
 }
