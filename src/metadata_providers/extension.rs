@@ -37,7 +37,7 @@ pub async fn register_activity(
             title: body.title,
             aux_title: body.artist,
             progress: None,
-            state: Some(super::PlaybackState::PLAYING),
+            state: Some(super::PlaybackState::Playing),
             provider_name: "Web Extension".to_string(),
             subprovider_name: Some(body.subprovider_name),
             media_type: body.media_type,
