@@ -9,15 +9,21 @@ use discord_rich_presence::{
     activity::{Activity, ActivityType, Assets},
     DiscordIpc, DiscordIpcClient,
 };
-use fltk::{
-    app::{self},
-    button::{Button, CheckButton},
-    group::Flex,
-    prelude::*,
-    text::TextDisplay,
-    window::Window,
-};
 use futures::executor::block_on;
+use gpui_tray::{Icon, Tray};
+use gpui_kit::component::{
+    button::{Button, ButtonVariants},
+    label::Label,
+};
+use gpui_kit::*;
+use gpui_kit::{
+    base::h_flex,
+    component::{
+        setting::{SettingField, SettingGroup, SettingItem, SettingPage, Settings},
+        Sizable,
+    },
+};
+use image::{DynamicImage, EncodableLayout};
 use settings::AppSettings;
 use std::sync::Arc;
 use std::{
@@ -31,7 +37,6 @@ use tokio::{
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tracing_subscriber::EnvFilter;
-use tray_icon::{menu::MenuEvent, Icon, TrayIconBuilder, TrayIconEvent};
 
 use util::pretty_time;
 
@@ -176,7 +181,7 @@ async fn service(
     }
     Ok(())
 }
-
+actions!(tray_example, [Open, Quit, Pause]);
 fn main() {
     #[allow(clippy::expect_used)]
     let _unused = tokio::runtime::Builder::new_multi_thread()
@@ -185,6 +190,24 @@ fn main() {
         .build()
         .expect("Could not launch tokio runtime")
         .block_on(async { app().await });
+}
+fn build_tray(cx: &mut App) -> anyhow::Result<()> {
+    let image = image::open("assets/icon.png")?;
+    let ic = Icon::from_rgba(image.to_rgba8().as_bytes(), image.width(), image.height()).build()?;
+    Tray::builder()
+        .icon(ic)
+        .title("My App")
+        .tooltip("My App")
+        .menu(|_cx| {
+            vec![
+                MenuItem::action("Open", Open),
+                MenuItem::action("Pause", Pause),
+                MenuItem::separator(),
+                MenuItem::action("Quit", Quit),
+            ]
+        })
+        .build(cx);
+    Ok(())
 }
 async fn app() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv()?;
@@ -211,71 +234,11 @@ async fn app() -> anyhow::Result<()> {
 
     // ui can't be moved outside the main thread; there's probably a way to solve this.
     let _settings_reader = block_on(async { ui_lock.read().await });
-    let app = app::App::default().with_scheme(fltk::app::AppScheme::Gtk);
-    let mut wind = Window::default().with_size(400, 300).center_screen();
-    let mut flex = Flex::default()
-        .with_size(200, 250)
-        .center_of_parent()
-        .column();
-    let mut extension_enabled_checkbox = CheckButton::default().with_label("Enable Extension Host");
-    extension_enabled_checkbox.set_checked(
-        settings
-            .read()
-            .await
-            .metadata_sources
-            .contains(&WEB_EXTENSION_STRING.to_string()),
-    );
 
-    extension_enabled_checkbox.set_callback(move |value| {
-        if value.is_checked() {
-            if let Some(token) = &extension_enabled_token {
-                token.cancel();
-            }
-        } else {
-        }
-    });
-    extension_enabled_checkbox.set_checked(
-        settings
-            .read()
-            .await
-            .metadata_sources
-            .contains(&WEB_EXTENSION_STRING.to_string()),
-    );
-
-    let mut save_button = Button::default().with_label("Save Changes");
-    save_button.set_callback(|_| {
-        let _ = restart_service();
-    });
-
-    let service_status_label = TextDisplay::default().with_label("Service Status");
-
-    flex.add(&save_button);
-    flex.add(&extension_enabled_checkbox);
-    flex.add(&service_status_label);
-    flex.end();
-    let (icon_rgba, icon_width, icon_height) = {
-        let image = image::open("assets/icon.png")?.into_rgba8();
-        let (width, height) = image.dimensions();
-        let rgba = image.into_raw();
-        (rgba, width, height)
-    };
-    let _tray_icon = TrayIconBuilder::new()
-        .with_tooltip("drp.rs - discord rich presence")
-        .with_icon(Icon::from_rgba(icon_rgba, icon_width, icon_height)?)
-        .build()?;
-    if let Ok(event) = TrayIconEvent::receiver().try_recv() {
-        println!("tray event: {:?}", event);
-    }
-
-    if let Ok(event) = MenuEvent::receiver().try_recv() {
-        println!("menu event: {:?}", event);
-    } // end ui section here
     tracker.spawn(init_providers(tx, service_lock, service_token, ext));
+    tracker.spawn_local(async { ui().await });
     // tracker.spawn(async || init_providers(tx, service_lock, service_token).await);
     tracker.spawn(async { service(extension_lock, extension_token, rx).await });
-    wind.end();
-    wind.show();
-    let _ = app.run();
 
     tracker.close();
     tracker.wait().await;
@@ -286,4 +249,45 @@ async fn app() -> anyhow::Result<()> {
         Err(_err) => {}
     }
     Ok(())
+}
+async fn ui() -> anyhow::Result<()> {
+    application().with_assets(assets::Assets).run(|cx| {
+        init(cx);
+        build_tray(cx);
+
+        open_window(WindowOptions::default(), cx, |_, cx| {
+            cx.new(|_| ConfigPanel)
+        })
+        .map_err(|_| anyhow!("Error"));
+    });
+    Ok(())
+}
+
+struct ConfigPanel;
+
+impl Render for ConfigPanel {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        Settings::new("my-settings").pages(vec![SettingPage::new("General").group(
+            SettingGroup::new().title("Basic Options").items(vec![
+                SettingItem::new(
+                    "Pause",
+                    SettingField::switch(
+                        |cx: &App| true,
+                        |val: bool, cx: &mut App| {
+                            println!("Feature enabled: {}", val);
+                        },
+                    ),
+                ),
+                SettingItem::new(
+                    "Enable Extension",
+                    SettingField::switch(
+                        |cx: &App| true,
+                        |val: bool, cx: &mut App| {
+                            println!("Feature enabled: {}", val);
+                        },
+                    ),
+                ),
+            ]),
+        )])
+    }
 }
